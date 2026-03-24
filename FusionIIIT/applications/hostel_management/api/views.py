@@ -1,7 +1,6 @@
 from django.core.serializers import serialize
 from django.http import HttpResponseBadRequest
-from .models import HostelLeave, HallCaretaker
-from applications.hostel_management.models import HallCaretaker, HallWarden
+from ..models import HostelLeave
 from django.http import JsonResponse, HttpResponse
 from django.db import IntegrityError
 from rest_framework.exceptions import NotFound
@@ -13,16 +12,15 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import render, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.permissions import IsAuthenticated
-from .models import HallCaretaker, HallWarden
 from django.urls import reverse
-from .models import StudentDetails
+from ..models import StudentDetails
 from rest_framework.exceptions import APIException
 
 
 
 from django.shortcuts import render, redirect
 
-from .models import HostelLeave
+from ..models import HostelLeave
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
@@ -48,17 +46,39 @@ from django.db.models import Q
 import datetime
 from datetime import time, datetime, date
 from time import mktime, time, localtime
-from .models import *
+from ..models import *
 import xlrd
-from .forms import GuestRoomBookingForm, HostelNoticeBoardForm
+from ..forms import GuestRoomBookingForm, HostelNoticeBoardForm
 import re
 from django.http import HttpResponse
 from django.template.loader import get_template
 from django.views.generic import View
 from django.db.models import Q
 from django.contrib import messages
-from .utils import render_to_pdf, save_worker_report_sheet, get_caretaker_hall
-from .utils import add_to_room, remove_from_room
+from ..services import (
+    add_to_room,
+    get_caretaker_hall,
+    remove_from_room,
+    render_to_pdf,
+    save_worker_report_sheet,
+)
+from ..selectors import (
+    get_all_halls,
+    get_available_rooms_for_halls,
+    get_guest_rooms_map,
+    get_hall_staff_assignments_map,
+    get_halls_attendance_map,
+    get_halls_notices_map,
+    get_halls_staff_schedules_map,
+    get_halls_students_map,
+    get_pending_guest_room_requests_map,
+)
+from ..services import (
+    build_student_details_for_hall,
+    get_staff_assigned_hall,
+    is_user_faculty,
+    is_user_staff,
+)
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -74,7 +94,7 @@ from django.contrib.auth.decorators import login_required
 from Fusion.settings.common import LOGIN_URL
 from django.shortcuts import get_object_or_404, redirect, render
 from django.db import transaction
-from .forms import HallForm
+from ..forms import HallForm
 from notification.views import hostel_notifications
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -107,63 +127,40 @@ def hostel_view(request, context={}):
     # Check if the user is a superuser
     is_superuser = request.user.is_superuser
 
-    all_hall = Hall.objects.all()
-    halls_student = {}
-    for hall in all_hall:
-        halls_student[hall.hall_id] = Student.objects.filter(
-            hall_no=int(hall.hall_id[4])).select_related('id__user')
-
-    hall_staffs = {}
-    for hall in all_hall:
-        hall_staffs[hall.hall_id] = StaffSchedule.objects.filter(
-            hall=hall).select_related('staff_id__id__user')
+    all_hall = list(get_all_halls())
+    halls_student = get_halls_students_map(all_hall)
+    hall_staffs = get_halls_staff_schedules_map(all_hall)
 
     all_notice = HostelNoticeBoard.objects.all().order_by("-id")
-    hall_notices = {}
-    for hall in all_hall:
-        hall_notices[hall.hall_id] = HostelNoticeBoard.objects.filter(
-            hall=hall).select_related('hall', 'posted_by__user')
+    hall_notices = get_halls_notices_map(all_hall)
+    pending_guest_room_requests = get_pending_guest_room_requests_map(all_hall)
+    guest_rooms = get_guest_rooms_map(all_hall)
+    user_guest_room_requests = GuestRoomBooking.objects.filter(intender=request.user).order_by(
+        "-arrival_date"
+    )
 
-    pending_guest_room_requests = {}
-    for hall in all_hall:
-        pending_guest_room_requests[hall.hall_id] = GuestRoomBooking.objects.filter(
-            hall=hall, status='Pending').select_related('hall', 'intender')
-        
-       
-    guest_rooms = {}
-    for hall in all_hall:
-        guest_rooms[hall.hall_id] = GuestRoom.objects.filter(
-            hall=hall,vacant=True).select_related('hall')
-    user_guest_room_requests = GuestRoomBooking.objects.filter(
-        intender=request.user).order_by("-arrival_date")
+    assignments = get_hall_staff_assignments_map(all_hall)
 
-    halls = Hall.objects.all()
     # Create a list to store additional details
     hostel_details = []
+    for hall in all_hall:
+        caretaker = assignments.get(hall.hall_id, {}).get("caretaker")
+        warden = assignments.get(hall.hall_id, {}).get("warden")
 
-    # Loop through each hall and fetch assignedCaretaker and assignedWarden
-    for hall in halls:
-        try:
-            caretaker = HallCaretaker.objects.filter(hall=hall).first()
-            warden = HallWarden.objects.filter(hall=hall).first()
-        except HostelAllotment.DoesNotExist:
-            assigned_caretaker = None
-            assigned_warden = None
-
-        vacant_seat=(hall.max_accomodation-hall.number_students)
-        hostel_detail = {
-            'hall_id': hall.hall_id,
-            'hall_name': hall.hall_name,
-            'seater_type':hall.type_of_seater,
-            'max_accomodation': hall.max_accomodation,
-            'number_students': hall.number_students,
-            'vacant_seat':vacant_seat,
-            'assigned_batch': hall.assigned_batch,
-            'assigned_caretaker': caretaker.staff.id.user.username if caretaker else None,
-            'assigned_warden': warden.faculty.id.user.username if warden else None,
-        }
-
-        hostel_details.append(hostel_detail)
+        vacant_seat = hall.max_accomodation - hall.number_students
+        hostel_details.append(
+            {
+                'hall_id': hall.hall_id,
+                'hall_name': hall.hall_name,
+                'seater_type': hall.type_of_seater,
+                'max_accomodation': hall.max_accomodation,
+                'number_students': hall.number_students,
+                'vacant_seat': vacant_seat,
+                'assigned_batch': hall.assigned_batch,
+                'assigned_caretaker': caretaker.staff.id.user.username if caretaker else None,
+                'assigned_warden': warden.faculty.id.user.username if warden else None,
+            }
+        )
 
     Staff_obj = Staff.objects.all().select_related('id__user')
     hall1 = Hall.objects.get(hall_id='hall1')
@@ -172,28 +169,20 @@ def hostel_view(request, context={}):
     hall1_staff = StaffSchedule.objects.filter(hall=hall1)
     hall3_staff = StaffSchedule.objects.filter(hall=hall3)
     hall4_staff = StaffSchedule.objects.filter(hall=hall4)
-    hall_caretakers = HallCaretaker.objects.all().select_related()
-    hall_wardens = HallWarden.objects.all().select_related()
+    hall_caretakers = HallCaretaker.objects.select_related('hall', 'staff__id__user')
+    hall_wardens = HallWarden.objects.select_related('hall', 'faculty__id__user')
+
     all_students = Student.objects.all().select_related('id__user')
-    all_students_id = []
-    for student in all_students:
-        all_students_id.append(student.id_id)
+    all_students_id = list(all_students.values_list('id_id', flat=True))
     # print(all_students)
     hall_student = ""
     current_hall = ""
-    get_avail_room = []
-    get_hall = get_caretaker_hall(hall_caretakers, request.user)
-    if get_hall:
-        get_hall_num = re.findall('[0-9]+', str(get_hall.hall_id))
-        hall_student = Student.objects.filter(hall_no=int(
-            str(get_hall_num[0]))).select_related('id__user')
-        current_hall = 'hall'+str(get_hall_num[0])
+    get_avail_room = get_available_rooms_for_halls(all_hall)
 
-    for hall in all_hall:
-        total_rooms = HallRoom.objects.filter(hall=hall)
-        for room in total_rooms:
-            if (room.room_cap > room.room_occupied):
-                get_avail_room.append(room)
+    assigned_hall = get_staff_assigned_hall(request.user)
+    if assigned_hall:
+        hall_student = halls_student.get(assigned_hall.hall_id, [])
+        current_hall = assigned_hall.hall_id
 
     hall_caretaker_user = []
     for caretaker in hall_caretakers:
@@ -202,11 +191,6 @@ def hostel_view(request, context={}):
     hall_warden_user = []
     for warden in hall_wardens:
         hall_warden_user.append(warden.faculty.id.user)
-
-    all_students = Student.objects.all().select_related('id__user')
-    all_students_id = []
-    for student in all_students:
-        all_students_id.append(student.id_id)
 
     todays_date = date.today()
     current_year = todays_date.year
@@ -219,11 +203,7 @@ def hostel_view(request, context={}):
         worker_report = WorkerReport.objects.filter(
             hall__hall_id=current_hall, year=current_year-1, month=12)
 
-    attendance = HostelStudentAttendence.objects.all().select_related()
-    halls_attendance = {}
-    for hall in all_hall:
-        halls_attendance[hall.hall_id] = HostelStudentAttendence.objects.filter(
-            hall=hall).select_related()
+    halls_attendance = get_halls_attendance_map(all_hall)
 
     user_complaints = HostelComplaint.objects.filter(
         roll_number=request.user.username)
@@ -243,31 +223,27 @@ def hostel_view(request, context={}):
 
     # //! My change for imposing fines
     user_id = request.user
-    staff_fine_caretaker = user_id.extrainfo.id
-    students = Student.objects.all()
+    try:
+        staff_fine_caretaker = user_id.extrainfo.id
+    except Exception:
+        staff_fine_caretaker = None
+    students = all_students
 
     fine_user = request.user
 
-    if request.user.id in Staff.objects.values_list('id__user', flat=True):
-        staff_fine_caretaker = request.user.extrainfo.id
-
-        caretaker_fine_id = HallCaretaker.objects.filter(
-            staff_id=staff_fine_caretaker).first()
+    if is_user_staff(request.user) and staff_fine_caretaker:
+        caretaker_fine_id = HallCaretaker.objects.filter(staff_id=staff_fine_caretaker).first()
         if caretaker_fine_id:
             hall_fine_id = caretaker_fine_id.hall_id
-            hostel_fines = HostelFine.objects.filter(
-                hall_id=hall_fine_id).order_by('fine_id')
+            hostel_fines = HostelFine.objects.filter(hall_id=hall_fine_id).order_by('fine_id')
             context['hostel_fines'] = hostel_fines
 
     # caretaker_fine_id = HallCaretaker.objects.get(staff_id=staff_fine_caretaker)
     # hall_fine_id = caretaker_fine_id.hall_id
     # hostel_fines = HostelFine.objects.filter(hall_id=hall_fine_id).order_by('fine_id')
 
-    if request.user.id in Staff.objects.values_list('id__user', flat=True):
-        staff_inventory_caretaker = request.user.extrainfo.id
-
-        caretaker_inventory_id = HallCaretaker.objects.filter(
-            staff_id=staff_inventory_caretaker).first()
+    if is_user_staff(request.user) and staff_fine_caretaker:
+        caretaker_inventory_id = HallCaretaker.objects.filter(staff_id=staff_fine_caretaker).first()
 
         if caretaker_inventory_id:
             hall_inventory_id = caretaker_inventory_id.hall_id
@@ -290,94 +266,28 @@ def hostel_view(request, context={}):
             context['inventories'] = inventory_data
 
     # all students details for caretaker and warden
-    if request.user.id in Staff.objects.values_list('id__user', flat=True):
-        staff_student_info = request.user.extrainfo.id
+    if is_user_staff(request.user) and staff_fine_caretaker:
+        caretaker_assignment = (
+            HallCaretaker.objects.filter(staff_id=staff_fine_caretaker)
+            .select_related('hall')
+            .first()
+        )
+        if caretaker_assignment:
+            payload = build_student_details_for_hall(
+                caretaker_assignment.hall, include_available_rooms=True
+            )
+            context['hostel_students_details'] = payload['students']
+            context['av_room'] = payload.get('available_rooms', [])
 
-        if HallCaretaker.objects.filter(staff_id=staff_student_info).exists():
-            hall_caretaker_id = HallCaretaker.objects.get(
-                staff_id=staff_student_info).hall_id
-
-            hall_num = Hall.objects.get(id=hall_caretaker_id)
-            hall_number = int(''.join(filter(str.isdigit,hall_num.hall_id)))
-
-            
-            # hostel_students_details = Student.objects.filter(hall_no=hall_number)
-            # context['hostel_students_details']= hostel_students_details
-
-            hostel_students_details = []
-            students = Student.objects.filter(hall_no=hall_number)
-
-            a_room=[]
-            t_rooms = HallRoom.objects.filter(hall=hall_num)
-            for room in t_rooms:
-                if (room.room_cap > room.room_occupied):
-                    a_room.append(room)
-
-            # print(a_room)
-            # Retrieve additional information for each student
-            for student in students:
-                student_info = {}
-                student_info['student_id'] = student.id.id
-                student_info['first_name'] = student.id.user.first_name
-                student_info['programme'] = student.programme
-                student_info['batch'] = student.batch
-                student_info['hall_number'] = student.hall_no
-                student_info['room_number'] = student.room_no
-                student_info['specialization'] = student.specialization
-                # student_info['parent_contact'] = student.parent_contact
-                
-                # Fetch address and phone number from ExtraInfo model
-                extra_info = ExtraInfo.objects.get(user=student.id.user)
-                student_info['address'] = extra_info.address
-                student_info['phone_number'] = extra_info.phone_no
-                
-                hostel_students_details.append(student_info)
-
-            # Sort the hostel_students_details list by roll number
-            hostel_students_details = sorted(hostel_students_details, key=lambda x: x['student_id'])
-            
-            
-            context['hostel_students_details'] = hostel_students_details
-            context['av_room'] = a_room
-
-    if request.user.id in Faculty.objects.values_list('id__user', flat=True):
-        staff_student_info = request.user.extrainfo.id    
-        if HallWarden.objects.filter(faculty_id=staff_student_info).exists():
-            hall_warden_id = HallWarden.objects.get(
-                faculty_id=staff_student_info).hall_id
-
-            hall_num = Hall.objects.get(id=hall_warden_id)
-
-            hall_number = int(''.join(filter(str.isdigit,hall_num.hall_id)))
-            
-            # hostel_students_details = Student.objects.filter(hall_no=hall_number)
-            # context['hostel_students_details']= hostel_students_details
-
-            hostel_students_details = []
-            students = Student.objects.filter(hall_no=hall_number)
-
-            # Retrieve additional information for each student
-            for student in students:
-                student_info = {}
-                student_info['student_id'] = student.id.id
-                student_info['first_name'] = student.id.user.first_name
-                student_info['programme'] = student.programme
-                student_info['batch'] = student.batch
-                student_info['hall_number'] = student.hall_no
-                student_info['room_number'] = student.room_no
-                student_info['specialization'] = student.specialization
-                # student_info['parent_contact'] = student.parent_contact
-                
-                # Fetch address and phone number from ExtraInfo model
-                extra_info = ExtraInfo.objects.get(user=student.id.user)
-                student_info['address'] = extra_info.address
-                student_info['phone_number'] = extra_info.phone_no
-                
-                hostel_students_details.append(student_info)
-                hostel_students_details = sorted(hostel_students_details, key=lambda x: x['student_id'])
-
-
-            context['hostel_students_details'] = hostel_students_details
+    if is_user_faculty(request.user) and staff_fine_caretaker:
+        warden_assignment = (
+            HallWarden.objects.filter(faculty_id=staff_fine_caretaker)
+            .select_related('hall')
+            .first()
+        )
+        if warden_assignment:
+            payload = build_student_details_for_hall(warden_assignment.hall)
+            context['hostel_students_details'] = payload['students']
 
             
 
@@ -1671,9 +1581,9 @@ class HostelInventoryView(APIView):
 def update_allotment(request, pk):
     if request.method == 'POST':
         try:
-            allotment = HostelAllottment.objects.get(pk=pk)
-        except HostelAllottment.DoesNotExist:
-            return JsonResponse({'error': 'HostelAllottment not found'}, status=404)
+            allotment = HostelAllotment.objects.get(pk=pk)
+        except HostelAllotment.DoesNotExist:
+            return JsonResponse({'error': 'HostelAllotment not found'}, status=404)
 
         try:
             allotment.assignedWarden = Faculty.objects.get(
@@ -1683,7 +1593,7 @@ def update_allotment(request, pk):
             allotment.assignedBatch = request.POST.get(
                 'student_batch', allotment.assignedBatch)
             allotment.save()
-            return JsonResponse({'success': 'HostelAllottment updated successfully'})
+            return JsonResponse({'success': 'HostelAllotment updated successfully'})
         except (Faculty.DoesNotExist, Staff.DoesNotExist, IntegrityError):
             return JsonResponse({'error': 'Invalid data or integrity error'}, status=400)
 
