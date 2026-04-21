@@ -1,0 +1,83 @@
+Artifact_ID,Type,Status,Details
+HM-UC-001,Use Case,Implemented Correctly,6/6 passed
+HM-UC-002,Use Case,Implemented Correctly,3/3 passed
+HM-UC-003,Use Case,Partially Implemented,2/3 passed
+HM-UC-004,Use Case,Incorrectly Implemented,0/2 passed
+HM-UC-005,Use Case,Implemented Correctly,3/3 passed
+HM-UC-006,Use Case,Implemented Correctly,5/5 passed
+HM-UC-007,Use Case,Implemented Correctly,2/2 passed
+HM-UC-008,Use Case,Implemented Correctly,3/3 passed
+HM-UC-009,Use Case,Implemented Correctly,2/2 passed
+HM-UC-010,Use Case,Implemented Correctly,2/2 passed
+HM-UC-011,Use Case,Implemented Correctly,3/3 passed
+HM-UC-012,Use Case,Implemented Correctly,1/1 passed
+HM-UC-013,Use Case,Implemented Correctly,3/3 passed
+HM-UC-014,Use Case,Implemented Correctly,2/2 passed
+HM-UC-015,Use Case,Implemented Correctly,1/1 passed
+HM-UC-016,Use Case,Implemented Correctly,4/4 passed
+HM-UC-017,Use Case,Implemented Correctly,3/3 passed
+HM-UC-018,Use Case,Implemented Correctly,2/2 passed
+HM-UC-019,Use Case,Incorrectly Implemented,0/3 passed
+HM-UC-020,Use Case,Incorrectly Implemented,0/3 passed
+HM-UC-021,Use Case,Incorrectly Implemented,0/2 passed
+HM-UC-022,Use Case,Incorrectly Implemented,0/1 passed
+HM-UC-024,Use Case,Incorrectly Implemented,0/2 passed
+HM-UC-026,Use Case,Incorrectly Implemented,0/1 passed
+HM-UC-027,Use Case,Incorrectly Implemented,0/2 passed
+HM-UC-029,Use Case,Partially Implemented,1/2 passed
+HM-UC-030,Use Case,Incorrectly Implemented,0/2 passed
+HM-UC-031,Use Case,Incorrectly Implemented,0/2 passed
+HM-UC-032,Use Case,Implemented Correctly,3/3 passed
+HM-UC-033,Use Case,Partially Implemented,2/3 passed
+HM-UC-034,Use Case,Implemented Correctly,2/2 passed
+HM-UC-035,Use Case,Partially Implemented,1/2 passed
+HM-UC-036,Use Case,Implemented Correctly,3/3 passed
+HM-UC-037,Use Case,Implemented Correctly,2/2 passed
+HM-UC-038,Use Case,Incorrectly Implemented,0/3 passed
+HM-UC-039,Use Case,Incorrectly Implemented,0/2 passed
+HM-UC-040,Use Case,Incorrectly Implemented,0/2 passed
+BR-HM-012,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-013,Business Rule,Enforced Correctly,5/5 passed
+BR-HM-015,Business Rule,Incorrectly Enforced,0/3 passed
+BR-HM-016,Business Rule,Incorrectly Enforced,0/2 passed
+BR-HM-022,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-029,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-030,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-033,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-040,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-043,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-045,Business Rule,Partially Enforced,2/3 passed
+BR-HM-059,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-061,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-062,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-063,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-067,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-073,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-101,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-102,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-103,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-104,Business Rule,Partially Enforced,1/3 passed
+BR-HM-105,Business Rule,Incorrectly Enforced,0/2 passed
+BR-HM-106,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-107,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-108,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-109,Business Rule,Enforced Correctly,3/3 passed
+BR-HM-110,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-111,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-112,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-113,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-115,Business Rule,Enforced Correctly,2/2 passed
+BR-HM-116,Business Rule,Partially Enforced,1/2 passed
+HM-WF-101,Workflow,Partial,2/4 passed
+HM-WF-102,Workflow,Incorrect,0/4 passed
+HM-WF-103,Workflow,Partial,1/3 passed
+HM-WF-104,Workflow,Incorrect,0/2 passed
+HM-WF-105,Workflow,Incorrect,0/3 passed
+HM-WF-106,Workflow,Incorrect,0/3 passed
+HM-WF-107,Workflow,Incorrect,0/3 passed
+HM-WF-108,Workflow,Incorrect,0/3 passed
+HM-WF-109,Workflow,Incorrect,0/2 passed
+HM-WF-110,Workflow,Partial,1/3 passed
+HM-WF-111,Workflow,Partial,1/3 passed
+HM-WF-112,Workflow,Incorrect,0/3 passed
+HM-WF-113,Workflow,Incorrect,0/4 passed

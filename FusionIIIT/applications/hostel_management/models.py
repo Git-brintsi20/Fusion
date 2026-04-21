@@ -19,7 +19,7 @@ class HostelManagementConstants:
             ('Tuesday', 'Tuesday'),
             ('Wednesday', 'Wednesday'),
             ('Thursday', 'Thursday'),
-            ('Friday', 'Friday'),
+            ('Friday', 'Friday'),   
             ('Saturday', 'Saturday'),
             ('Sunday', 'Sunday')
         )
@@ -35,6 +35,18 @@ class HostelManagementConstants:
     ("Forward", 'Forward')
     )    
 
+    TYPE_OF_SEATER = (
+        ('single', 'Single Seater'),
+        ('double', 'Double Seater'),
+        ('triple', 'Triple Seater'),
+    )
+
+    ROOM_TYPES = (
+        ('single', 'Single'),
+        ('double', 'Double'),
+        ('triple', 'Triple'),
+    )
+
 
 class Hall(models.Model):
     """
@@ -49,13 +61,11 @@ class Hall(models.Model):
     max_accomodation = models.IntegerField(default=0)
     number_students = models.PositiveIntegerField(default=0)
     assigned_batch = models.CharField(max_length=50, null=True, blank=True)
-    TYPE_OF_SEATER_CHOICES = [
-        ('single', 'Single Seater'),
-        ('double', 'Double Seater'),
-        ('triple', 'Triple Seater'),
-    ]
-
-    type_of_seater = models.CharField(max_length=50, choices=TYPE_OF_SEATER_CHOICES, default='single')
+    type_of_seater = models.CharField(
+        max_length=50,
+        choices=HostelManagementConstants.TYPE_OF_SEATER,
+        default='single',
+    )
     def __str__(self):
         return self.hall_id 
 
@@ -124,13 +134,7 @@ class GuestRoomBooking(models.Model):
     status = models.CharField(max_length=255, choices=HostelManagementConstants.BOOKING_STATUS ,default ="Pending")
     booking_date = models.DateField(auto_now_add=False, auto_now=False, default=timezone.now)
     nationality = models.CharField(max_length=255, blank=True)
-    ROOM_TYPES = [
-        ('single', 'Single'),
-        ('double', 'Double'),
-        ('triple', 'Triple'),
-        # Add more room types as needed
-    ]
-    room_type = models.CharField(max_length=10, choices=ROOM_TYPES ,default='single')
+    room_type = models.CharField(max_length=10, choices=HostelManagementConstants.ROOM_TYPES ,default='single')
     
     def __str__(self):
         return '%s ----> %s - %s' % (self.id, self.guest_name, self.status)
@@ -269,17 +273,90 @@ class HostelLeave(models.Model):
     def _str_(self):
         return f"{self.student_name}'s Leave"  
 
+
+class LeaveRequest(models.Model):
+    """Unmanaged model mapping the existing `leave_requests` DB table.
+
+    NOTE: Do NOT create migrations for this model.
+    """
+
+    id = models.AutoField(primary_key=True)
+    student_name = models.CharField(max_length=255)
+    roll_num = models.CharField(max_length=255)
+    reason = models.TextField()
+    phone_number = models.CharField(max_length=255)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(max_length=255)
+    remark = models.TextField(null=True, blank=True)
+    file_upload = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "leave_requests"
+
 # changes
 
 class HostelComplaint(models.Model):
+    STATUS_CHOICES = [
+        ('open', 'Open'),
+        ('in_progress', 'In Progress'),
+        ('resolved', 'Resolved'),
+    ]
+
+    hall_name = models.CharField(max_length=100)
+    student_name = models.CharField(max_length=100)
+    roll_number = models.CharField(max_length=20)
+    category = models.CharField(max_length=50, default='General')
+    description = models.TextField()
+    contact_number = models.CharField(max_length=15)
+    image_upload = models.FileField(upload_to='hostel_management/complaints/', null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Complaint from {self.student_name} in {self.hall_name}"
+
+
+class HostelRoomChangeRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    student_name = models.CharField(max_length=100)
+    roll_num = models.CharField(max_length=20)
+    current_room = models.CharField(max_length=20)
+    preferred_room = models.CharField(max_length=20)
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.roll_num} room change request"
+
+
+class Complaint(models.Model):
+    """Unmanaged model mapping the existing `complaints` DB table.
+
+    NOTE: Do NOT create migrations for this model.
+    """
+
+    id = models.AutoField(primary_key=True)
     hall_name = models.CharField(max_length=100)
     student_name = models.CharField(max_length=100)
     roll_number = models.CharField(max_length=20)
     description = models.TextField()
     contact_number = models.CharField(max_length=15)
+    status = models.CharField(max_length=20, default="OPEN")
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
 
-    def __str__(self):
-        return f"Complaint from {self.student_name} in {self.hall_name}"
+    class Meta:
+        managed = False
+        db_table = "complaints"
       
     
 class HostelAllotment(models.Model):
@@ -315,16 +392,11 @@ class GuestRoom(models.Model):
     'vacant' boolean value to determine if the room is vacant
     'occupied_till', date field that tells the next time the room will be vacant, null if 'vacant' == True
     """
-    ROOM_TYPES = [
-        ('single', 'Single'),
-        ('double', 'Double'),
-        ('triple', 'Triple'),
-    ]
     hall = models.ForeignKey(Hall, on_delete=models.CASCADE)
     room = models.CharField(max_length=255)
     occupied_till = models.DateField(null=True, blank=True)
     vacant = models.BooleanField(default=True)
-    room_type = models.CharField(max_length=10, choices=ROOM_TYPES ,default='single')
+    room_type = models.CharField(max_length=10, choices=HostelManagementConstants.ROOM_TYPES ,default='single')
     @property
     def _vacant(self) -> bool:
         if self.occupied_till and self.occupied_till > timezone.now():

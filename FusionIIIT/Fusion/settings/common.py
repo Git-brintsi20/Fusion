@@ -260,8 +260,15 @@ SITE_ID = 1
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, '..', 'static')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-MEDIA_ROOT = os.path.join(BASE_DIR, '..', 'media')
+DEFAULT_MEDIA_ROOT = os.path.join(BASE_DIR, '..', 'media')
+DESKTOP_MEDIA_ROOT = os.path.join(os.path.expanduser('~'), 'Desktop', 'Files')
+MEDIA_ROOT = (
+    DESKTOP_MEDIA_ROOT
+    if os.path.isdir(os.path.join(os.path.expanduser('~'), 'Desktop'))
+    else DEFAULT_MEDIA_ROOT
+)
 MEDIA_URL = '/media/'
+os.makedirs(MEDIA_ROOT, exist_ok=True)
 
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_REQUIRED = True

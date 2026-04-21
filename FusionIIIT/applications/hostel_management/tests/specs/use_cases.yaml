@@ -1,0 +1,1187 @@
+use_cases:
+
+  - id: "HM-UC-001"
+    title: "Submit Leave Request"
+    description: "Student submits leave application with mandatory supporting documents for Caretaker approval."
+    actors: "Primary: Student, Secondary: Caretaker"
+    preconditions: "Student is logged into the Fusion system and has active hostel allocation."
+    referenced_brs: ["BR-HM-101", "BR-HM-102", "BR-HM-103"]
+
+    happy_paths:
+      - scenario: "Student submits leave request with valid dates, reason, and supporting documents"
+        preconditions: "Student is logged in and has active hostel allotment"
+        input_action: "POST /hostel/leave with start_date=future, end_date>=start_date, reason=non-empty, documents=uploaded"
+        expected_result: "Leave request created with status=Pending; Caretaker notified; success message shown"
+
+    alternate_paths:
+      - scenario: "Student submits leave request without optional documents but with mandatory reason"
+        preconditions: "Student is logged in"
+        input_action: "POST /hostel/leave with valid dates and reason, no document upload"
+        expected_result: "System prompts document upload before allowing submission (mandatory per policy)"
+      - scenario: "Student corrects invalid dates after system error and resubmits"
+        preconditions: "Student is logged in; initial submission had invalid dates"
+        input_action: "PATCH /hostel/leave with corrected start_date and end_date"
+        expected_result: "Leave request accepted and recorded with status=Pending"
+
+    exception_paths:
+      - scenario: "Student submits leave with past start date"
+        preconditions: "Student is logged in"
+        input_action: "POST /hostel/leave with start_date=yesterday"
+        expected_result: "Request rejected with date validation error; form data retained"
+      - scenario: "Student submits leave with end_date before start_date"
+        preconditions: "Student is logged in"
+        input_action: "POST /hostel/leave with end_date < start_date"
+        expected_result: "Validation error per BR-HM-102; request not submitted"
+      - scenario: "Student without active hostel allotment attempts to submit leave"
+        preconditions: "Student is logged in but hostel_status != Active"
+        input_action: "POST /hostel/leave with valid dates"
+        expected_result: "Request rejected per BR-HM-101 with residency error"
+      - scenario: "Student submits leave with empty reason field"
+        preconditions: "Student is logged in"
+        input_action: "POST /hostel/leave with reason=empty"
+        expected_result: "Submission blocked per BR-HM-103; error displayed"
+
+  - id: "HM-UC-002"
+    title: "Process Leave Request"
+    description: "Caretaker reviews pending leave requests with supporting documents and approves or rejects them with reason."
+    actors: "Primary: Caretaker, Secondary: Student"
+    preconditions: "Caretaker is logged in; at least one leave request with status=Pending exists."
+    referenced_brs: ["BR-HM-104"]
+
+    happy_paths:
+      - scenario: "Caretaker reviews and approves a valid leave request with proper remarks"
+        preconditions: "Caretaker is logged in and assigned to student's hostel; leave request is Pending"
+        input_action: "PATCH /hostel/leave/{id}/decision with decision=Approved, remarks=non-empty"
+        expected_result: "Leave status updated to Approved; attendance updated; student notified"
+      - scenario: "Caretaker rejects a leave request with mandatory rejection reason"
+        preconditions: "Caretaker is logged in; leave request is Pending"
+        input_action: "PATCH /hostel/leave/{id}/decision with decision=Rejected, remarks=non-empty"
+        expected_result: "Leave status updated to Rejected; student notified; no attendance change"
+
+    alternate_paths:
+      - scenario: "Supporting documents are unavailable or corrupted during review"
+        preconditions: "Caretaker is reviewing a request; document file is corrupted"
+        input_action: "GET /hostel/leave/{id}/documents"
+        expected_result: "System displays error; Caretaker contacts student for resubmission"
+
+    exception_paths:
+      - scenario: "Caretaker from a different hostel attempts to process the request"
+        preconditions: "Caretaker assigned to Hostel B tries to approve leave for Hostel A student"
+        input_action: "PATCH /hostel/leave/{id}/decision"
+        expected_result: "Action denied per BR-HM-104; authorization error returned"
+
+  - id: "HM-UC-003"
+    title: "View Leave Status and History"
+    description: "Student or Caretaker views current status and past history of leave requests."
+    actors: "Primary: Student, Caretaker"
+    preconditions: "Actor is logged in; at least one leave request exists in the system."
+
+    happy_paths:
+      - scenario: "Student views their own leave history with all statuses"
+        preconditions: "Student is logged in and has submitted at least one leave request"
+        input_action: "GET /hostel/leave/history"
+        expected_result: "List of leave requests displayed with status, dates, and remarks"
+      - scenario: "Student drills into a specific leave record for full details"
+        preconditions: "Student has at least one leave request"
+        input_action: "GET /hostel/leave/{id}"
+        expected_result: "Full leave request details including reason, documents, and decision remarks shown"
+
+    alternate_paths:
+      - scenario: "No leave requests found for student"
+        preconditions: "Student has never submitted a leave request"
+        input_action: "GET /hostel/leave/history"
+        expected_result: "System displays 'No leave requests available' message"
+      - scenario: "Actor returns to list without viewing details"
+        preconditions: "Actor views leave list"
+        input_action: "Navigation back from detail page"
+        expected_result: "Flow ends at leave list; no state change"
+
+    exception_paths:
+      - scenario: "System fails to retrieve leave records"
+        preconditions: "Database or API error occurs"
+        input_action: "GET /hostel/leave/history"
+        expected_result: "Error message displayed; no data shown"
+
+  - id: "HM-UC-004"
+    title: "Update Attendance and Send Notification"
+    description: "System automatically updates student attendance based on leave approval and sends notifications for status changes."
+    actors: "Primary: System, Secondary: Student, Caretaker"
+    preconditions: "Leave request exists; leave status change event has occurred."
+    referenced_brs: ["BR-HM-105"]
+
+    happy_paths:
+      - scenario: "Leave approved triggers attendance update and student notification"
+        preconditions: "Leave status changes to Approved"
+        input_action: "SYSTEM EVENT: leave.status = Approved"
+        expected_result: "Attendance marked as 'On Leave' for approved dates; student and Caretaker notified; event logged"
+      - scenario: "Leave submitted triggers Caretaker notification only"
+        preconditions: "New leave request submitted"
+        input_action: "SYSTEM EVENT: leave.status = Pending (new submission)"
+        expected_result: "Caretaker notified; no attendance update"
+
+    alternate_paths:
+      - scenario: "Leave rejected — skip attendance update, notify student"
+        preconditions: "Leave status changes to Rejected"
+        input_action: "SYSTEM EVENT: leave.status = Rejected"
+        expected_result: "Student notified of rejection; attendance not modified"
+
+    exception_paths:
+      - scenario: "Notification delivery fails"
+        preconditions: "Notification system is unavailable"
+        input_action: "SYSTEM EVENT: send notification"
+        expected_result: "Retry scheduled; failure logged for admin review"
+
+  - id: "HM-UC-005"
+    title: "Generate Leave Report"
+    description: "Caretaker or Warden generates reports on leave requests and approval patterns for their assigned hostel."
+    actors: "Primary: Caretaker, Warden"
+    preconditions: "Actor is logged in with appropriate permissions; leave data exists."
+
+    happy_paths:
+      - scenario: "Warden generates leave report for a custom date range"
+        preconditions: "Warden is logged in with report permissions"
+        input_action: "POST /hostel/reports/leave with date_range, status_filter, hostel_id"
+        expected_result: "Report generated with total requests, approved, rejected, pending counts; available for viewing"
+      - scenario: "Actor downloads report as PDF"
+        preconditions: "Report has been generated"
+        input_action: "GET /hostel/reports/leave/{id}/download?format=pdf"
+        expected_result: "PDF file generated and downloaded"
+
+    alternate_paths:
+      - scenario: "Actor does not specify parameters; defaults applied"
+        preconditions: "Actor opens report form without setting filters"
+        input_action: "POST /hostel/reports/leave with no parameters"
+        expected_result: "Report generated using current month and all statuses as defaults"
+
+    exception_paths:
+      - scenario: "Actor submits invalid date range (future end date beyond allowed)"
+        preconditions: "Actor is filling report form"
+        input_action: "POST /hostel/reports/leave with invalid date range"
+        expected_result: "Validation error displayed; report not generated"
+
+  - id: "HM-UC-006"
+    title: "Submit Complaint"
+    description: "Student submits complaint with category, description, and optional attachments for resolution by Caretaker."
+    actors: "Primary: Student, Secondary: Caretaker"
+    preconditions: "Student is logged in and has active hostel allocation."
+    referenced_brs: ["BR-HM-106", "BR-HM-107"]
+
+    happy_paths:
+      - scenario: "Student submits a facility complaint with optional attachment"
+        preconditions: "Student is logged in with active hostel allotment"
+        input_action: "POST /hostel/complaint with category=facility, description=non-empty, attachment=optional"
+        expected_result: "Complaint recorded with status=Submitted and unique ID; Caretaker notified"
+      - scenario: "Student submits a security complaint routed to Warden"
+        preconditions: "Student is logged in"
+        input_action: "POST /hostel/complaint with category=security, description=non-empty"
+        expected_result: "Complaint recorded; Warden notified (per BR-HM-107.a)"
+
+    alternate_paths:
+      - scenario: "Student submits complaint without optional attachment"
+        preconditions: "Student is logged in"
+        input_action: "POST /hostel/complaint with category and description, no attachment"
+        expected_result: "Complaint recorded successfully; system proceeds without attachment"
+
+    exception_paths:
+      - scenario: "Student without active hostel allotment submits complaint"
+        preconditions: "Student hostel_status != Active"
+        input_action: "POST /hostel/complaint"
+        expected_result: "Submission rejected per BR-HM-106"
+      - scenario: "Student submits complaint with missing category or description"
+        preconditions: "Student is logged in"
+        input_action: "POST /hostel/complaint with category=null or description=empty"
+        expected_result: "Validation error displayed; complaint not submitted"
+
+  - id: "HM-UC-007"
+    title: "Review and Address Complaint"
+    description: "Caretaker reviews, investigates, and resolves student complaints by coordinating with staff and inventory."
+    actors: "Primary: Caretaker, Secondary: Student, Hostel Staff"
+    preconditions: "Caretaker is logged in; at least one complaint with status=Submitted or In Progress exists."
+    referenced_brs: ["BR-HM-108", "BR-HM-109"]
+
+    happy_paths:
+      - scenario: "Caretaker investigates and resolves complaint with mandatory resolution remarks"
+        preconditions: "Complaint exists with status=In Progress"
+        input_action: "PATCH /hostel/complaint/{id} with status=Resolved, remarks=non-empty"
+        expected_result: "Complaint marked Resolved; resolution timestamp recorded; student notified"
+
+    alternate_paths:
+      - scenario: "Complaint requires staff coordination before resolution"
+        preconditions: "Caretaker is reviewing complaint"
+        input_action: "PATCH /hostel/complaint/{id}/assign-staff with staff_id"
+        expected_result: "Task assigned to staff; Caretaker monitors progress; complaint status remains In Progress"
+      - scenario: "Complaint cannot be resolved at Caretaker level; escalation required"
+        preconditions: "Caretaker has investigated but cannot resolve"
+        input_action: "See HM-UC-008 (Escalate to Warden)"
+        expected_result: "Complaint escalated per BR-HM-109"
+
+    exception_paths:
+      - scenario: "Caretaker attempts to resolve complaint without providing remarks"
+        preconditions: "Caretaker is submitting resolution"
+        input_action: "PATCH /hostel/complaint/{id} with status=Resolved, remarks=empty"
+        expected_result: "Update blocked per BR-HM-108; error displayed"
+
+  - id: "HM-UC-008"
+    title: "Escalate Complaint to Warden"
+    description: "Caretaker escalates unresolved or critical complaints to Warden for higher-level intervention."
+    actors: "Primary: Caretaker, Secondary: Warden, Student"
+    preconditions: "Caretaker is logged in; complaint exists with status=In Progress."
+    referenced_brs: ["BR-HM-109"]
+
+    happy_paths:
+      - scenario: "Caretaker escalates In Progress complaint with mandatory reason"
+        preconditions: "Complaint status is In Progress; Caretaker has investigated"
+        input_action: "POST /hostel/complaint/{id}/escalate with reason=non-empty"
+        expected_result: "Complaint status updated to Escalated; Warden notified; student informed of escalation"
+
+    alternate_paths: []
+
+    exception_paths:
+      - scenario: "Caretaker attempts to escalate complaint without providing reason"
+        preconditions: "Complaint is In Progress"
+        input_action: "POST /hostel/complaint/{id}/escalate with reason=empty"
+        expected_result: "System prompts for mandatory escalation reason; action blocked"
+      - scenario: "Caretaker attempts to escalate a complaint not in In Progress status"
+        preconditions: "Complaint status is Submitted or Resolved"
+        input_action: "POST /hostel/complaint/{id}/escalate"
+        expected_result: "Action blocked per BR-HM-109; error returned"
+
+  - id: "HM-UC-009"
+    title: "View and Manage Complaint Reports"
+    description: "Warden monitors escalated complaints, views complaint status and history, and generates complaint resolution reports."
+    actors: "Primary: Warden, Secondary: Caretaker, Student"
+    preconditions: "Warden is logged in; complaint data exists."
+    referenced_brs: ["BR-HM-110"]
+
+    happy_paths:
+      - scenario: "Warden views and resolves an escalated complaint"
+        preconditions: "Complaint status is Escalated"
+        input_action: "PATCH /hostel/complaint/{id} with status=Resolved, remarks=non-empty (Warden role)"
+        expected_result: "Complaint resolved; actors notified; resolution logged per BR-HM-110"
+      - scenario: "Warden generates complaint resolution report"
+        preconditions: "Complaint data exists"
+        input_action: "POST /hostel/reports/complaints with date_range, category, status filters"
+        expected_result: "Report generated showing resolution statistics, average resolution time, escalation patterns"
+
+    alternate_paths:
+      - scenario: "Warden views list of escalated complaints"
+        preconditions: "Escalated complaints exist"
+        input_action: "GET /hostel/complaints?status=Escalated"
+        expected_result: "List of escalated complaints with escalation reasons displayed"
+      - scenario: "Warden reassigns complaint back to Caretaker with instructions"
+        preconditions: "Complaint is Escalated; requires further Caretaker action"
+        input_action: "PATCH /hostel/complaint/{id}/reassign with caretaker_id, instructions"
+        expected_result: "Complaint reassigned; status remains Escalated; Caretaker notified"
+
+    exception_paths:
+      - scenario: "Non-Warden role attempts to resolve escalated complaint"
+        preconditions: "Caretaker tries to resolve an Escalated complaint"
+        input_action: "PATCH /hostel/complaint/{id} with status=Resolved (Caretaker role)"
+        expected_result: "Action denied per BR-HM-110; authorization error"
+
+  - id: "HM-UC-010"
+    title: "Submit Accommodation Request"
+    description: "Students submit hostel accommodation requests through the system."
+    actors: "Primary: Student"
+    preconditions: "Student is registered; hostels are created and activated; accommodation application window is open."
+    referenced_brs: ["BR-HM-111"]
+
+    happy_paths:
+      - scenario: "Student submits accommodation request during open application window"
+        preconditions: "Student is logged in; application window is open; hostel is active"
+        input_action: "POST /hostel/accommodation/request with hostel_type, room_preferences"
+        expected_result: "Request recorded with status=Pending; confirmation displayed to student"
+
+    alternate_paths: []
+
+    exception_paths:
+      - scenario: "Student submits request with missing required fields"
+        preconditions: "Student is logged in; application window is open"
+        input_action: "POST /hostel/accommodation/request with missing fields"
+        expected_result: "Validation error displayed; request not submitted"
+      - scenario: "Student submits request when application window is closed"
+        preconditions: "window_status != Open"
+        input_action: "POST /hostel/accommodation/request"
+        expected_result: "Request rejected per BR-HM-111 with timing error"
+
+  - id: "HM-UC-011"
+    title: "Perform Bulk Room Allotment"
+    description: "Super Admin reviews accommodation requests and available capacity, performs bulk room allotment, preventing over-allocation."
+    actors: "Primary: Super Admin"
+    preconditions: "Super Admin is logged in; pending accommodation requests exist; rooms are available."
+    referenced_brs: ["BR-HM-112", "BR-HM-113"]
+
+    happy_paths:
+      - scenario: "Super Admin performs bulk allotment within available capacity"
+        preconditions: "Pending requests exist; sufficient room capacity available"
+        input_action: "POST /hostel/allotment/bulk with request_ids[], criteria={hostel, room_type}"
+        expected_result: "Rooms allocated; occupancy updated in real time; request statuses set to Allotted; summary report generated"
+
+    alternate_paths:
+      - scenario: "Super Admin selects all pending requests"
+        preconditions: "Multiple pending requests exist"
+        input_action: "POST /hostel/allotment/bulk with all request_ids"
+        expected_result: "System processes all pending requests against available capacity"
+
+    exception_paths:
+      - scenario: "Insufficient room capacity for selected requests"
+        preconditions: "Selected requests exceed available rooms"
+        input_action: "POST /hostel/allotment/bulk with excess request count"
+        expected_result: "Warning displayed per BR-HM-112; suggests reducing selection or alternate hostels"
+      - scenario: "Over-allocation detected during bulk allotment"
+        preconditions: "Allotment would exceed room capacity"
+        input_action: "SYSTEM CHECK: occupancy >= capacity"
+        expected_result: "Allotment blocked per BR-HM-112; error with capacity details shown"
+      - scenario: "Non-Super Admin role attempts bulk allotment"
+        preconditions: "Caretaker or Warden tries to run bulk allotment"
+        input_action: "POST /hostel/allotment/bulk"
+        expected_result: "Action denied per BR-HM-113"
+
+  - id: "HM-UC-012"
+    title: "Notify and Record Room Assignments"
+    description: "System notifies students and caretakers of room allotments and records room assignment history for audit purposes."
+    actors: "Primary: System, Secondary: Student, Caretaker"
+    preconditions: "Bulk room allotment completed successfully; students have been assigned rooms."
+    referenced_brs: ["BR-HM-114"]
+
+    happy_paths:
+      - scenario: "System sends room assignment notifications to all allotted students and caretakers"
+        preconditions: "Bulk allotment completed"
+        input_action: "SYSTEM EVENT: allotment.status = Completed"
+        expected_result: "All students notified with room details; caretakers notified with occupancy summary; assignment history recorded with timestamp; student profiles updated"
+
+    alternate_paths:
+      - scenario: "Notification delivery fails for some students"
+        preconditions: "Some notifications fail due to delivery error"
+        input_action: "SYSTEM EVENT: notification delivery failure"
+        expected_result: "System retries failed notifications; failed attempts logged for admin review"
+
+    exception_paths: []
+
+  - id: "HM-UC-013"
+    title: "Submit Room Change Request"
+    description: "Student submits room change request with reason; system records the request for review by Caretaker and Warden."
+    actors: "Primary: Student, Secondary: Caretaker, Warden"
+    preconditions: "Student is logged in and has active room allocation."
+    referenced_brs: ["BR-HM-115"]
+
+    happy_paths:
+      - scenario: "Student submits room change request with mandatory reason"
+        preconditions: "Student has active room allocation"
+        input_action: "POST /hostel/room-change with reason=non-empty, preferred_room=optional"
+        expected_result: "Request recorded with status=Pending and unique ID; Caretaker and Warden notified"
+
+    alternate_paths:
+      - scenario: "Student submits without specifying preferred room"
+        preconditions: "Student is logged in"
+        input_action: "POST /hostel/room-change with reason=non-empty, no preference"
+        expected_result: "Request recorded without room preference; processed normally"
+
+    exception_paths:
+      - scenario: "Student without active room allotment submits room change"
+        preconditions: "student.room_status != Active"
+        input_action: "POST /hostel/room-change"
+        expected_result: "Request rejected per BR-HM-115"
+      - scenario: "Student submits request without providing reason"
+        preconditions: "Student is logged in"
+        input_action: "POST /hostel/room-change with reason=empty"
+        expected_result: "Validation error; request not submitted"
+
+  - id: "HM-UC-014"
+    title: "Review and Process Room Change Request"
+    description: "Caretaker and Warden review room change request, check room availability, and approve or reject based on compliance."
+    actors: "Primary: Caretaker, Warden, Secondary: Student"
+    preconditions: "Caretaker and Warden are logged in; at least one room change request with status=Pending exists."
+    referenced_brs: ["BR-HM-116"]
+
+    happy_paths:
+      - scenario: "Both Caretaker and Warden approve room change request with remarks"
+        preconditions: "Room is available; request complies with policy"
+        input_action: "PATCH /hostel/room-change/{id}/decision with decision=Approved from both Caretaker and Warden"
+        expected_result: "Request status updated to Approved; ready for room reallocation"
+
+    alternate_paths:
+      - scenario: "No rooms available; Caretaker adds student to waiting list"
+        preconditions: "No suitable rooms are available"
+        input_action: "GET /hostel/rooms?available=true"
+        expected_result: "Caretaker recommends rejection or adds to waiting list; request status updated accordingly"
+
+    exception_paths:
+      - scenario: "Request violates hostel policies; Warden rejects with policy reference"
+        preconditions: "Policy non-compliance detected during review"
+        input_action: "PATCH /hostel/room-change/{id}/decision with decision=Rejected, remarks=policy_reference"
+        expected_result: "Request rejected; student notified with policy reason"
+      - scenario: "Only one approval obtained; system blocks reallocation"
+        preconditions: "Either Caretaker or Warden has not approved"
+        input_action: "SYSTEM CHECK: dual approval"
+        expected_result: "Reallocation blocked per BR-HM-116; request remains Pending"
+
+  - id: "HM-UC-015"
+    title: "Update Room Allocation and Notify"
+    description: "System updates room allocation and occupancy for approved requests, notifies student, and records assignment history."
+    actors: "Primary: System, Secondary: Student, Caretaker"
+    preconditions: "Room change request has been approved; new room is available."
+    referenced_brs: ["BR-HM-117", "BR-HM-118"]
+
+    happy_paths:
+      - scenario: "System successfully updates room allocation after dual approval"
+        preconditions: "Request is Approved; new room is available"
+        input_action: "SYSTEM EVENT: room_change.status = Approved"
+        expected_result: "Old room occupancy decremented; new room occupancy incremented; student profile updated; student and Caretaker notified; assignment history recorded"
+
+    alternate_paths:
+      - scenario: "Request is rejected; student notified with remarks"
+        preconditions: "Request status is Rejected"
+        input_action: "SYSTEM EVENT: room_change.status = Rejected"
+        expected_result: "Rejection notification sent to student with decision remarks; no occupancy change"
+
+    exception_paths:
+      - scenario: "New room becomes unavailable between approval and reallocation"
+        preconditions: "New room was allocated to another student after approval"
+        input_action: "SYSTEM CHECK: new room availability"
+        expected_result: "Caretaker alerted; request status reverted to Pending for reassignment"
+
+  - id: "HM-UC-016"
+    title: "Impose and Record Fine"
+    description: "Caretaker imposes a fine on a student for violations (rule violation, property damage, attendance, room standards). Fine recorded and student notified automatically."
+    actors: "Primary: Caretaker, Secondary: Student, System"
+    preconditions: "Caretaker is logged in with permissions; student is a current resident."
+    referenced_brs: ["BR-HM-012", "BR-HM-013", "BR-HM-014", "BR-HM-022"]
+
+    happy_paths:
+      - scenario: "Caretaker imposes a valid fine with all required fields"
+        preconditions: "Caretaker is logged in; student is a hostel resident"
+        input_action: "POST /hostel/fine with student_id, category=Hostel Rule Violation, amount>0, reason=non-empty, date=auto"
+        expected_result: "Fine created with status=Unpaid; linked to student account; student notified with fine details and reference ID"
+
+    alternate_paths:
+      - scenario: "Caretaker uploads supporting evidence with fine"
+        preconditions: "Evidence file is within size limit and supported format"
+        input_action: "POST /hostel/fine with file attachment"
+        expected_result: "Fine recorded with attached evidence; notification sent to student"
+
+    exception_paths:
+      - scenario: "Fine amount is zero or negative"
+        preconditions: "Caretaker fills fine form"
+        input_action: "POST /hostel/fine with amount=0 or amount<0"
+        expected_result: "Validation error per BR-HM-013.a; fine not submitted"
+      - scenario: "Fine reason field is empty"
+        preconditions: "Caretaker fills fine form"
+        input_action: "POST /hostel/fine with reason=empty"
+        expected_result: "Validation error per BR-HM-013.c; fine not submitted"
+      - scenario: "Uploaded evidence file exceeds size limit or wrong format"
+        preconditions: "Caretaker uploads file"
+        input_action: "POST /hostel/fine with file.size > 5MB or unsupported format"
+        expected_result: "Upload rejected per BR-HM-022; error displayed; submission blocked"
+
+  - id: "HM-UC-017"
+    title: "View and Track Fines"
+    description: "Student views all fines imposed on them including reason, amount, date, payment status, and fine history."
+    actors: "Primary: Student"
+    preconditions: "Student is logged in; student must be or have been a hostel resident."
+    referenced_brs: ["BR-HM-014", "BR-HM-012"]
+
+    happy_paths:
+      - scenario: "Student views their complete fine list including pending and paid fines"
+        preconditions: "Student is logged in; fines exist on their account"
+        input_action: "GET /hostel/my-fines"
+        expected_result: "List displayed with fine ID, category, date, reason, amount, status per BR-HM-012.a"
+      - scenario: "Student filters fines by status (Unpaid) and views details"
+        preconditions: "Student has at least one unpaid fine"
+        input_action: "GET /hostel/my-fines?status=Unpaid"
+        expected_result: "Filtered list showing only unpaid fines; student aware of outstanding dues"
+      - scenario: "Student downloads fine history as PDF"
+        preconditions: "Student has fine records"
+        input_action: "GET /hostel/my-fines/download?format=pdf"
+        expected_result: "PDF generated with student name, roll number, hostel details, and fine table; downloaded to device"
+
+    alternate_paths: []
+
+    exception_paths:
+      - scenario: "No fines exist for student"
+        preconditions: "Student has no fines on account"
+        input_action: "GET /hostel/my-fines"
+        expected_result: "System displays 'No fines have been imposed on your account'"
+      - scenario: "System error prevents fine data from loading"
+        preconditions: "Database error occurs"
+        input_action: "GET /hostel/my-fines"
+        expected_result: "Error message displayed; student advised to retry"
+
+  - id: "HM-UC-018"
+    title: "Monitor and Analyze Fines"
+    description: "Warden reviews fine summaries, monitors individual records, identifies repeat offenders, tracks violation patterns, and generates fine reports."
+    actors: "Primary: Warden"
+    preconditions: "Warden is logged in with appropriate permissions; assigned to one or more hostels."
+    referenced_brs: ["BR-HM-012", "BR-HM-013", "BR-HM-014"]
+
+    happy_paths:
+      - scenario: "Warden generates comprehensive fine report with visualizations"
+        preconditions: "Fine data exists for the selected period"
+        input_action: "POST /hostel/reports/fines with report_type, date_range, group_by, filters"
+        expected_result: "Report generated with data visualizations, detailed tables, and insights; downloadable as PDF/Excel/CSV"
+      - scenario: "Warden identifies repeat offenders using threshold filter"
+        preconditions: "Students with multiple fines exist"
+        input_action: "GET /hostel/fines/repeat-offenders?threshold=3"
+        expected_result: "List of students with 3+ fines; sorted by violation count; bulk actions available"
+
+    alternate_paths: []
+
+    exception_paths:
+      - scenario: "No fine data for selected parameters"
+        preconditions: "No fines recorded in specified date range"
+        input_action: "POST /hostel/reports/fines with empty result criteria"
+        expected_result: "System displays 'No fine records found for the specified criteria'"
+
+  - id: "HM-UC-019"
+    title: "Create Hostel"
+    description: "Super Admin creates and registers a new hostel with essential details. Newly created hostels start in Inactive status."
+    actors: "Primary: Super Admin"
+    preconditions: "Super Admin is logged in with administrative permissions."
+    referenced_brs: ["BR-HM-025", "BR-HM-008"]
+
+    happy_paths:
+      - scenario: "Super Admin creates a new hostel with all required details"
+        preconditions: "Super Admin is logged in"
+        input_action: "POST /hostel with name=unique, type, capacity>0, room_configuration"
+        expected_result: "Hostel created with status=Inactive; unique hostel ID generated; room records created; creation logged in audit trail"
+
+    alternate_paths: []
+
+    exception_paths:
+      - scenario: "Hostel name already exists in system"
+        preconditions: "Super Admin submits form"
+        input_action: "POST /hostel with name=duplicate_name"
+        expected_result: "Validation error: 'A hostel with this name already exists'; hostel not created"
+      - scenario: "Capacity or room count is invalid (zero or negative)"
+        preconditions: "Super Admin fills form"
+        input_action: "POST /hostel with capacity=0 or capacity<0"
+        expected_result: "Validation error: 'Please enter valid positive numbers'; hostel not created"
+      - scenario: "Mandatory fields are missing"
+        preconditions: "Super Admin submits incomplete form"
+        input_action: "POST /hostel with missing required fields"
+        expected_result: "Validation error listing missing fields; hostel not created"
+
+  - id: "HM-UC-020"
+    title: "Manage Hostel Status"
+    description: "Super Admin manages the operational status of an existing hostel: activate, deactivate, or mark under maintenance."
+    actors: "Primary: Super Admin"
+    preconditions: "Super Admin is logged in; at least one hostel exists."
+    referenced_brs: ["BR-HM-008", "BR-HM-019", "BR-HM-025"]
+
+    happy_paths:
+      - scenario: "Super Admin activates a fully staffed hostel"
+        preconditions: "Hostel has Warden and Caretaker assigned; room configuration complete"
+        input_action: "PATCH /hostel/{id}/status with status=Active"
+        expected_result: "Hostel status updated to Active; available for room allocation; status change logged"
+      - scenario: "Super Admin marks empty hostel as Under Maintenance"
+        preconditions: "Hostel has no occupied rooms"
+        input_action: "PATCH /hostel/{id}/status with status=Under Maintenance"
+        expected_result: "New allocations blocked; resident data retained; change logged"
+
+    alternate_paths: []
+
+    exception_paths:
+      - scenario: "Activation blocked due to missing mandatory staff"
+        preconditions: "Hostel has no Warden or Caretaker assigned"
+        input_action: "PATCH /hostel/{id}/status with status=Active"
+        expected_result: "Activation blocked per BR-HM-008.b; error message shown"
+      - scenario: "Deactivation blocked due to occupied rooms"
+        preconditions: "Hostel has occupied rooms"
+        input_action: "PATCH /hostel/{id}/status with status=Inactive"
+        expected_result: "Deactivation blocked per BR-HM-008.a; error showing number of occupied rooms"
+      - scenario: "Activation blocked due to incomplete room configuration"
+        preconditions: "Room configuration is incomplete"
+        input_action: "PATCH /hostel/{id}/status with status=Active"
+        expected_result: "System displays 'Room configuration is incomplete'; activation blocked"
+
+  - id: "HM-UC-021"
+    title: "Assign Warden to Hostel"
+    description: "Super Admin assigns a Hostel Warden to a specific hostel with hostel-specific and time-bound role granting supervisory authority."
+    actors: "Primary: Super Admin, Secondary: Warden"
+    preconditions: "Super Admin is logged in; at least one hostel exists; eligible staff members registered."
+    referenced_brs: ["BR-HM-008", "BR-HM-012", "BR-HM-019"]
+
+    happy_paths:
+      - scenario: "Super Admin assigns a Warden to a hostel with start date"
+        preconditions: "Hostel exists; eligible staff available"
+        input_action: "POST /hostel/{id}/staff/warden with staff_id, start_date, end_date=optional"
+        expected_result: "Warden role assignment created; permissions granted immediately; staff notified; assignment logged"
+
+    alternate_paths:
+      - scenario: "Staff member is already a Warden elsewhere"
+        preconditions: "Selected staff has existing Warden assignment"
+        input_action: "POST /hostel/{id}/staff/warden with staff_id of currently assigned Warden"
+        expected_result: "System warns about concurrent assignment; Super Admin can confirm or select different staff"
+
+    exception_paths:
+      - scenario: "Assignment dates are invalid (end_date before start_date)"
+        preconditions: "Super Admin fills assignment form"
+        input_action: "POST /hostel/{id}/staff/warden with end_date < start_date"
+        expected_result: "Validation error; assignment not created"
+
+  - id: "HM-UC-022"
+    title: "Assign Caretaker to Hostel"
+    description: "Super Admin assigns a Hostel Caretaker to a specific hostel with hostel-specific, time-bound role and defined shift responsibilities."
+    actors: "Primary: Super Admin, Secondary: Caretaker"
+    preconditions: "Super Admin is logged in; at least one hostel exists; eligible staff registered."
+    referenced_brs: ["BR-HM-008", "BR-HM-012", "BR-HM-019"]
+
+    happy_paths:
+      - scenario: "Super Admin assigns a Caretaker to a hostel with shift details"
+        preconditions: "Hostel exists; eligible Caretaker staff available"
+        input_action: "POST /hostel/{id}/staff/caretaker with staff_id, start_date, end_date=optional"
+        expected_result: "Caretaker assignment created; permissions granted immediately; staff notified; assignment logged with shift"
+
+    alternate_paths:
+      - scenario: "Concurrent assignment detected; Super Admin confirms override"
+        preconditions: "Selected staff already assigned to another hostel"
+        input_action: "POST /hostel/{id}/staff/caretaker with staff_id of currently assigned Caretaker"
+        expected_result: "System warns; Super Admin can confirm, cancel, or reassign"
+
+    exception_paths:
+      - scenario: "Invalid assignment dates"
+        preconditions: "Super Admin fills form"
+        input_action: "POST /hostel/{id}/staff/caretaker with end_date < start_date"
+        expected_result: "Validation error; assignment not created"
+      - scenario: "Insufficient Caretaker coverage advisory"
+        preconditions: "Hostel shift coverage is below threshold"
+        input_action: "POST /hostel/{id}/staff/caretaker"
+        expected_result: "System shows advisory about insufficient coverage; Super Admin can proceed or add more Caretakers"
+
+  - id: "HM-UC-023"
+    title: "Reassign Staff Roles"
+    description: "Super Admin reassigns Wardens or Caretakers from one hostel to another. Pending responsibilities are automatically transferred to newly assigned personnel."
+    actors: "Primary: Super Admin, Secondary: Current Staff, New Staff"
+    preconditions: "Super Admin is logged in; at least one staff member is currently assigned to a hostel."
+    referenced_brs: ["BR-HM-008", "BR-HM-012", "BR-HM-019"]
+
+    happy_paths:
+      - scenario: "Super Admin reassigns Warden from one hostel to another with responsibility transfer"
+        preconditions: "Source hostel has another Warden to absorb responsibilities"
+        input_action: "POST /hostel/staff/reassign with staff_id, destination_hostel_id, effective_date, reason"
+        expected_result: "Staff reassigned; pending responsibilities transferred; all parties notified; old access removed; new access granted"
+
+    alternate_paths:
+      - scenario: "Super Admin retains staff in current hostel as concurrent assignment"
+        preconditions: "Staff member reassigned but kept in original hostel as secondary"
+        input_action: "POST /hostel/staff/reassign with retain_current=true"
+        expected_result: "Concurrent assignment created; staff has dual hostel access"
+
+    exception_paths:
+      - scenario: "Destination hostel is inactive"
+        preconditions: "Target hostel status = Inactive"
+        input_action: "POST /hostel/staff/reassign with inactive destination_hostel_id"
+        expected_result: "Blocked: 'Cannot reassign to an inactive hostel'; Super Admin selects different hostel"
+      - scenario: "No other staff available for responsibility transfer"
+        preconditions: "Only one Warden/Caretaker in source hostel"
+        input_action: "POST /hostel/staff/reassign with sole_staff"
+        expected_result: "Critical warning displayed; Super Admin must assign replacement, use temporary Super Admin handling, or deactivate hostel before proceeding"
+
+  - id: "HM-UC-024"
+    title: "Manage Guard Shift Schedules"
+    description: "Hostel Warden creates, updates, and manages security guard shift schedules for continuous adequate security coverage."
+    actors: "Primary: Hostel Warden, Secondary: System"
+    preconditions: "Warden is logged in with valid permissions; security guards are registered and active; hostel configured."
+    referenced_brs: ["BR-HM-012", "BR-HM-016", "BR-HM-026"]
+
+    happy_paths:
+      - scenario: "Warden creates weekly guard schedule with full shift coverage"
+        preconditions: "Guards are registered; shift slots configured"
+        input_action: "POST /hostel/security/schedule with shifts[], guard_assignments[], period=weekly"
+        expected_result: "Schedule saved; guards notified; no conflicts detected per BR-HM-016; minimum coverage met per BR-HM-026"
+
+    alternate_paths:
+      - scenario: "Guard has overlapping shifts; Warden overrides warning per policy"
+        preconditions: "New shift overlaps with existing guard assignment"
+        input_action: "POST /hostel/security/schedule with overlapping shift; override=true"
+        expected_result: "System warns; Warden can override based on policy; schedule saved"
+
+    exception_paths:
+      - scenario: "Mandatory shifts have no guard assigned; save blocked"
+        preconditions: "Required shifts are unassigned"
+        input_action: "POST /hostel/security/schedule with unassigned mandatory shifts"
+        expected_result: "Save blocked per BR-HM-026; coverage gaps highlighted; no schedule saved"
+
+  - id: "HM-UC-025"
+    title: "Review Hostel Security Status"
+    description: "Hostel Warden reviews overall security status by monitoring guard deployment, shift coverage, and security records."
+    actors: "Primary: Hostel Warden, Secondary: System"
+    preconditions: "Warden is logged in; guard shift schedules and deployment data exist; security logs are enabled."
+    referenced_brs: ["BR-HM-012", "BR-HM-016", "BR-HM-027"]
+
+    happy_paths:
+      - scenario: "Warden reviews consolidated security dashboard and records"
+        preconditions: "Guard schedules and deployment data exist"
+        input_action: "GET /hostel/security/dashboard"
+        expected_result: "Current guard deployment, active shifts, duty history, and incident logs displayed; security gaps highlighted"
+
+    alternate_paths:
+      - scenario: "No historical records exist for selected date range"
+        preconditions: "Date range has no security records"
+        input_action: "GET /hostel/security/history?date_from=X&date_to=Y"
+        expected_result: "Informational message displayed; no error"
+
+    exception_paths:
+      - scenario: "Critical security gaps detected; system flags as high priority"
+        preconditions: "Understaffed or uncovered shifts found"
+        input_action: "SYSTEM CHECK: shift coverage"
+        expected_result: "Gaps flagged as high priority; Warden alerted for immediate action"
+
+  - id: "HM-UC-026"
+    title: "Check Hostel Inventory and Identify Issues"
+    description: "Hostel Caretaker performs routine inventory inspections to verify availability and condition of hostel assets, documenting discrepancies."
+    actors: "Primary: Hostel Caretaker"
+    preconditions: "Caretaker is logged in; inventory records exist for the hostel."
+    referenced_brs: ["BR-HM-012", "BR-HM-021"]
+
+    happy_paths:
+      - scenario: "Caretaker completes inventory inspection and marks discrepancies"
+        preconditions: "Inventory records exist"
+        input_action: "POST /hostel/inventory/inspection with items[{item_id, status, remarks}]"
+        expected_result: "Inspection results saved; discrepancies documented with type and remarks"
+
+    alternate_paths: []
+
+    exception_paths:
+      - scenario: "Inventory data fails to load"
+        preconditions: "Database or API error"
+        input_action: "GET /hostel/inventory"
+        expected_result: "Error message displayed; inspection cannot proceed"
+
+  - id: "HM-UC-027"
+    title: "Submit Application for Resource Requirements"
+    description: "Hostel Caretaker submits applications for missing, damaged, or additional inventory resources for approval."
+    actors: "Primary: Hostel Caretaker, Secondary: Hostel Warden, Super Admin"
+    preconditions: "Caretaker is logged in; resource requirement or discrepancy identified."
+    referenced_brs: ["BR-HM-030"]
+
+    happy_paths:
+      - scenario: "Caretaker submits valid replacement resource request"
+        preconditions: "Caretaker has identified inventory discrepancy"
+        input_action: "POST /hostel/resource-request with type=Replacement, item_id, quantity>0, justification=non-empty"
+        expected_result: "Request created with status=Pending; appears in approval dashboards of Warden and Super Admin"
+
+    alternate_paths: []
+
+    exception_paths:
+      - scenario: "Required details missing from resource request"
+        preconditions: "Caretaker submits incomplete form"
+        input_action: "POST /hostel/resource-request with missing type or quantity<=0 or empty justification"
+        expected_result: "Validation error per BR-HM-030; request not submitted; Caretaker prompted to correct"
+
+  - id: "HM-UC-028"
+    title: "Update Inventory Records"
+    description: "Hostel Caretaker updates inventory records to reflect new acquisitions, consumed supplies, damaged items, or allocated resources."
+    actors: "Primary: Hostel Caretaker, Secondary: Hostel Warden, Super Admin"
+    preconditions: "Caretaker is logged in; inventory items exist in the system."
+    referenced_brs: ["BR-HM-031"]
+
+    happy_paths:
+      - scenario: "Caretaker updates inventory quantity with update reason"
+        preconditions: "Inventory item exists"
+        input_action: "PATCH /hostel/inventory/{item_id} with quantity=new_value, condition_status, reason=non-empty"
+        expected_result: "Inventory records updated; update logged with timestamp and user details per BR-HM-031"
+
+    alternate_paths: []
+
+    exception_paths:
+      - scenario: "Invalid quantity entered (negative value)"
+        preconditions: "Caretaker is updating inventory"
+        input_action: "PATCH /hostel/inventory/{item_id} with quantity<0"
+        expected_result: "Validation error displayed; update not saved"
+
+  - id: "HM-UC-029"
+    title: "Request Room Vacation"
+    description: "Student submits room vacation request with intended vacation date and reason. System generates clearance checklist of pending requirements."
+    actors: "Primary: Student, Secondary: Caretaker, Super Admin"
+    preconditions: "Student is logged in with active room allocation; no pending vacation request exists."
+    referenced_brs: ["BR-HM-015"]
+
+    happy_paths:
+      - scenario: "Student submits vacation request with all clearance items satisfied"
+        preconditions: "Student has no outstanding fines, unreturned items, or pending damages"
+        input_action: "POST /hostel/vacation-request with vacation_date=future, reason=non-empty"
+        expected_result: "Clearance checklist generated; request recorded with status=Pending Clearance; Caretaker and Super Admin notified"
+
+    alternate_paths:
+      - scenario: "Student has pending clearance items; highlighted but request still recorded"
+        preconditions: "Student has outstanding fines or unreturned items"
+        input_action: "POST /hostel/vacation-request after viewing checklist"
+        expected_result: "Clearance checklist shows pending items in red; request recorded; student warned of required actions"
+
+    exception_paths:
+      - scenario: "Vacation date is in the past"
+        preconditions: "Student fills vacation form"
+        input_action: "POST /hostel/vacation-request with vacation_date=past"
+        expected_result: "Validation error; request not submitted"
+      - scenario: "Reason field is empty"
+        preconditions: "Student fills vacation form"
+        input_action: "POST /hostel/vacation-request with reason=empty"
+        expected_result: "Validation error; request not submitted"
+
+  - id: "HM-UC-030"
+    title: "Verify Clearance Requirements"
+    description: "Caretaker conducts comprehensive clearance verification for students requesting room vacation including room inspection, fine verification, borrowed items, and attendance review."
+    actors: "Primary: Caretaker, Secondary: Student, Super Admin"
+    preconditions: "Caretaker is logged in; vacation request with status=Pending Clearance exists; Caretaker is assigned to student's hostel."
+    referenced_brs: ["BR-HM-015"]
+
+    happy_paths:
+      - scenario: "Caretaker verifies all clearance items satisfied and approves clearance"
+        preconditions: "All clearance requirements are met"
+        input_action: "POST /hostel/vacation/{id}/clearance with status=Approved"
+        expected_result: "Clearance certificate issued; vacation request status updated to 'Clearance Approved'; student and Super Admin notified"
+
+    alternate_paths:
+      - scenario: "Room damages found; Caretaker documents and creates fine"
+        preconditions: "Physical inspection reveals damage"
+        input_action: "POST /hostel/vacation/{id}/clearance/damage with photos, description, fine"
+        expected_result: "Damage documented; fine created; clearance item marked Pending - Damage Fine; student notified"
+      - scenario: "Attendance below threshold; Caretaker escalates to Warden"
+        preconditions: "Student attendance below required threshold"
+        input_action: "POST /hostel/vacation/{id}/escalate-to-warden"
+        expected_result: "Warden review initiated before clearance decision"
+
+    exception_paths:
+      - scenario: "Caretaker requests corrections; student must resolve items"
+        preconditions: "Some clearance items are unsatisfied"
+        input_action: "POST /hostel/vacation/{id}/clearance with status=Request Corrections"
+        expected_result: "Vacation status updated to 'Clearance Pending - Action Required'; student notified with specific items to resolve"
+
+  - id: "HM-UC-031"
+    title: "Complete Room Vacation"
+    description: "Super Admin finalizes room vacation after clearance approval: deallocates room, updates availability, archives hostel history, and confirms to student."
+    actors: "Primary: Super Admin, Secondary: Student, System"
+    preconditions: "Super Admin is logged in; vacation request has status=Clearance Approved; clearance certificate issued; all checklist items verified."
+    referenced_brs: ["BR-HM-023", "BR-HM-028"]
+
+    happy_paths:
+      - scenario: "Super Admin finalizes room vacation with complete archival"
+        preconditions: "Vacation request is Clearance Approved"
+        input_action: "POST /hostel/vacation/{id}/finalize with confirmed=true"
+        expected_result: "Room deallocated; room status updated to Available; complete student hostel history archived; vacation request marked Completed; final confirmation sent to student"
+
+    alternate_paths:
+      - scenario: "Super Admin cancels finalization prompt without making changes"
+        preconditions: "Super Admin views confirmation prompt"
+        input_action: "Cancel action on confirmation dialog"
+        expected_result: "Returns to vacation request details; no changes made"
+
+    exception_paths:
+      - scenario: "System error during deallocation or archival"
+        preconditions: "Finalization process encounters error"
+        input_action: "POST /hostel/vacation/{id}/finalize"
+        expected_result: "All changes rolled back; error logged; Super Admin notified of failure with error details; original status retained for retry"
+      - scenario: "Finalization attempted without clearance approval"
+        preconditions: "Clearance status is not Approved"
+        input_action: "POST /hostel/vacation/{id}/finalize"
+        expected_result: "Blocked per BR-HM-028; error: 'Prerequisites not satisfied'"
+
+  - id: "HM-UC-032"
+    title: "Create and Publish Notice"
+    description: "Caretaker or Warden creates, edits, and publishes hostel notices with title, description, attachments, target audience, priority, and display duration."
+    actors: "Primary: Caretaker, Warden, Secondary: Student, System"
+    preconditions: "Caretaker/Warden is logged in; assigned to at least one hostel; has notice publication permissions."
+    referenced_brs: ["BR-HM-029", "BR-HM-033"]
+
+    happy_paths:
+      - scenario: "Staff creates and publishes a Normal priority notice to specific hostel"
+        preconditions: "Staff is logged in with notice permissions"
+        input_action: "POST /hostel/notice with title=valid, description=valid, audience=hostel_id, priority=Normal, start_date, end_date"
+        expected_result: "Notice published to notice board; targeted students notified; notice appears on student homepage; tracking record created"
+      - scenario: "Staff publishes Urgent priority notice with immediate push notifications"
+        preconditions: "Staff is logged in"
+        input_action: "POST /hostel/notice with priority=Urgent"
+        expected_result: "Notice displayed with red banner per BR-HM-033.b; immediate push notifications sent to targeted students"
+
+    alternate_paths:
+      - scenario: "Staff edits an already published notice"
+        preconditions: "Notice is published"
+        input_action: "PATCH /hostel/notice/{id} with updated fields"
+        expected_result: "Notice updated; update notification sent to relevant students"
+      - scenario: "Staff deletes a published notice"
+        preconditions: "Notice is published"
+        input_action: "DELETE /hostel/notice/{id} with confirmation"
+        expected_result: "Notice removed from board; removal notification sent; notice deleted from system"
+
+    exception_paths:
+      - scenario: "Notice title is too short or too long"
+        preconditions: "Staff fills notice form"
+        input_action: "POST /hostel/notice with title.length < 5 or > 200"
+        expected_result: "Validation error per BR-HM-029.a; notice not published"
+      - scenario: "Attached file exceeds size limit or is unsupported format"
+        preconditions: "Staff uploads attachment"
+        input_action: "POST /hostel/notice with file.size > limit or wrong format"
+        expected_result: "Upload error displayed; submission prevented"
+      - scenario: "No audience selected for notice"
+        preconditions: "Staff fills notice form without selecting audience"
+        input_action: "POST /hostel/notice with audience=null"
+        expected_result: "Validation error; notice not published"
+
+  - id: "HM-UC-033"
+    title: "View and Store Notice"
+    description: "Students view published hostel notices, filter by criteria, download attachments, mark as read. System auto-archives expired notices."
+    actors: "Primary: Student, Secondary: System"
+    preconditions: "Student is logged in with active hostel accommodation; at least one notice has been published."
+    referenced_brs: ["BR-HM-035", "BR-HM-039"]
+
+    happy_paths:
+      - scenario: "Student views active notices relevant to their hostel on login"
+        preconditions: "Active notices exist for student's hostel"
+        input_action: "GET /hostel/notices"
+        expected_result: "Notices displayed ordered by priority then date per BR-HM-035; unread notices visually distinguished"
+      - scenario: "Student clicks notice to view full details; notice marked as read"
+        preconditions: "Unread notice exists"
+        input_action: "GET /hostel/notices/{id}"
+        expected_result: "Full notice content displayed; notice marked as Read for this student"
+      - scenario: "System archives expired notices automatically"
+        preconditions: "current_date > notice.end_date for some notices"
+        input_action: "SYSTEM EVENT: daily expiry check"
+        expected_result: "Expired notices moved to archive; removed from active notice board; archival logged"
+
+    alternate_paths:
+      - scenario: "Student filters notices by priority=Urgent"
+        preconditions: "Notices with different priorities exist"
+        input_action: "GET /hostel/notices?priority=Urgent"
+        expected_result: "Only urgent notices displayed"
+      - scenario: "Student views notice history including archived notices"
+        preconditions: "Archived notices exist"
+        input_action: "GET /hostel/notices/history"
+        expected_result: "All active and archived notices accessible for reference"
+
+    exception_paths:
+      - scenario: "Filters return no results"
+        preconditions: "No notices match applied filters"
+        input_action: "GET /hostel/notices?date=today&priority=Urgent"
+        expected_result: "'No notices found matching criteria' message; option to clear filters"
+      - scenario: "Attachment download fails due to server error"
+        preconditions: "Student attempts to download attachment"
+        input_action: "GET /hostel/notices/{id}/attachment"
+        expected_result: "Error message displayed; retry option provided"
+
+  - id: "HM-UC-034"
+    title: "Create Reports"
+    description: "Warden or Caretaker generates comprehensive hostel reports by selecting report type, applying filters and date ranges with visualizations."
+    actors: "Primary: Warden, Caretaker, Secondary: System"
+    preconditions: "Warden/Caretaker is logged in; assigned to at least one hostel; sufficient data exists; user has report generation permissions."
+    referenced_brs: ["BR-HM-040", "BR-HM-043", "BR-HM-044"]
+
+    happy_paths:
+      - scenario: "Warden generates Attendance Summary Report for a date range"
+        preconditions: "Warden is logged in; attendance data exists"
+        input_action: "POST /hostel/reports with type=Attendance Summary, date_from, date_to, hostel_id"
+        expected_result: "Report generated with summary statistics, charts, detailed tables, trend analysis; ready for review and submission"
+      - scenario: "Staff saves filter combination as reusable template"
+        preconditions: "Staff generates report with specific filters"
+        input_action: "POST /hostel/reports/templates with filter_set, template_name"
+        expected_result: "Filter template saved for future use"
+
+    alternate_paths:
+      - scenario: "Comprehensive Hostel Report selected; all data categories included"
+        preconditions: "Staff selects Comprehensive Hostel Report type"
+        input_action: "POST /hostel/reports with type=Comprehensive"
+        expected_result: "Multi-section report generated with data from all report types"
+
+    exception_paths:
+      - scenario: "End date is before start date"
+        preconditions: "Staff fills report parameters"
+        input_action: "POST /hostel/reports with end_date < start_date"
+        expected_result: "Validation error per BR-HM-043; problematic fields highlighted"
+
+  - id: "HM-UC-035"
+    title: "Submit and Review Reports"
+    description: "Warden submits generated reports to Super Admin with notes. Super Admin reviews, provides feedback, and downloads reports. System maintains complete audit trail."
+    actors: "Primary: Warden, Super Admin, Secondary: System"
+    preconditions: "Warden is logged in; a report has been successfully generated and reviewed; Super Admin account is active."
+    referenced_brs: ["BR-HM-045", "BR-HM-046", "BR-HM-050"]
+
+    happy_paths:
+      - scenario: "Warden submits report to Super Admin with notes; Super Admin approves and downloads"
+        preconditions: "Report is in Generated status"
+        input_action: "POST /hostel/reports/{id}/submit with notes, priority=Normal"
+        expected_result: "Report submitted; Super Admin notified; status updated to Submitted; Super Admin reviews and downloads as PDF/Excel; access logged in audit trail"
+
+    alternate_paths:
+      - scenario: "Super Admin requests clarification; Warden resubmits with additional info"
+        preconditions: "Super Admin reviews report and needs more details"
+        input_action: "POST /hostel/reports/{id}/feedback with clarification_needed=true, comments"
+        expected_result: "Report returned to Warden; Warden updates and resubmits"
+      - scenario: "Warden attaches supporting documents with report submission"
+        preconditions: "Warden is submitting report"
+        input_action: "POST /hostel/reports/{id}/submit with attachments"
+        expected_result: "Report and attachments submitted together"
+
+    exception_paths:
+      - scenario: "Submission fails due to missing required fields"
+        preconditions: "Warden submits without required fields"
+        input_action: "POST /hostel/reports/{id}/submit with missing fields"
+        expected_result: "Submission blocked; report remains in Draft status; Warden can retry"
+
+  - id: "HM-UC-036"
+    title: "Request Guest Room"
+    description: "Student submits guest room booking request with guest details, dates, and purpose. Can view availability, track status, and modify or cancel before approval."
+    actors: "Primary: Student, Secondary: Caretaker, System"
+    preconditions: "Student is logged in with active hostel accommodation; guest room booking feature is enabled; at least one guest room exists."
+    referenced_brs: ["BR-HM-051", "BR-HM-052", "BR-HM-053", "BR-HM-054", "BR-HM-055"]
+
+    happy_paths:
+      - scenario: "Student submits valid guest room booking request with all required details"
+        preconditions: "Student meets eligibility per BR-HM-051; guest room available"
+        input_action: "POST /hostel/guest-room/booking with guest_name, guest_contact, check_in_date, check_out_date, purpose"
+        expected_result: "Booking request recorded with status=Pending and unique ID; Caretaker notified; student acknowledgment sent"
+
+    alternate_paths:
+      - scenario: "Student modifies pending booking request"
+        preconditions: "Booking status is Pending"
+        input_action: "PATCH /hostel/guest-room/booking/{id} with updated fields"
+        expected_result: "Booking updated; reset to Pending; Caretaker notified of modification"
+      - scenario: "Student cancels approved booking before check-in date"
+        preconditions: "Booking is Approved; check-in has not occurred"
+        input_action: "POST /hostel/guest-room/booking/{id}/cancel with confirmation"
+        expected_result: "Booking status updated to Cancelled; room reservation released; Caretaker notified"
+
+    exception_paths:
+      - scenario: "Check-out date is same as or before check-in date"
+        preconditions: "Student fills booking form"
+        input_action: "POST /hostel/guest-room/booking with check_out_date <= check_in_date"
+        expected_result: "Validation error per BR-HM-052; booking not submitted"
+      - scenario: "No guest rooms available for selected dates"
+        preconditions: "All rooms booked for the requested dates"
+        input_action: "GET /hostel/guest-room/availability?check_in=X&check_out=Y"
+        expected_result: "'No rooms available' displayed; alternative dates suggested"
+      - scenario: "Booking duration exceeds 7 consecutive nights"
+        preconditions: "Student selects dates beyond maximum stay"
+        input_action: "POST /hostel/guest-room/booking with stay_duration > 7 nights"
+        expected_result: "Rejected per BR-HM-055; suggests splitting into multiple bookings"
+      - scenario: "Booking requested less than 2 days in advance"
+        preconditions: "Student submits booking for tomorrow"
+        input_action: "POST /hostel/guest-room/booking with check_in_date within 2 days"
+        expected_result: "Rejected per BR-HM-054 unless emergency override by Caretaker"
+
+  - id: "HM-UC-037"
+    title: "Approve and Manage Booking"
+    description: "Caretaker reviews guest room booking requests, verifies eligibility and availability, approves/rejects, manages check-in/check-out, handles damages and fines."
+    actors: "Primary: Caretaker, Secondary: Student, System"
+    preconditions: "Caretaker is logged in and assigned to the relevant hostel; at least one booking request exists or approved booking requires processing."
+    referenced_brs: ["BR-HM-051", "BR-HM-056", "BR-HM-057", "BR-HM-058", "BR-HM-059"]
+
+    happy_paths:
+      - scenario: "Caretaker approves booking; guest checks in and out without damages"
+        preconditions: "Booking is Pending; student is eligible; room is available"
+        input_action: "PATCH /hostel/guest-room/booking/{id} with status=Approved, then check-in and check-out"
+        expected_result: "Booking approved; room reserved; guest checked in with ID verification; room inspected; booking completed with status=Completed; room marked Available"
+      - scenario: "Caretaker rejects booking with detailed reason"
+        preconditions: "Student ineligible or room unavailable"
+        input_action: "PATCH /hostel/guest-room/booking/{id} with status=Rejected, reason, comments"
+        expected_result: "Booking rejected; student notified with reason; room remains available"
+
+    alternate_paths:
+      - scenario: "Damages found at check-out; fine imposed"
+        preconditions: "Room inspection reveals damage"
+        input_action: "POST /hostel/fine with damage_details, photos, estimated_cost linked to booking"
+        expected_result: "Fine created and linked to booking; student notified; booking status=Completed with Damages"
+
+    exception_paths:
+      - scenario: "Guest identity verification fails at check-in"
+        preconditions: "Guest presents invalid or missing ID"
+        input_action: "POST /hostel/guest-room/booking/{id}/checkin with id_verification=failed"
+        expected_result: "Check-in denied; student contacted for clarification; booking may be cancelled if unresolved"
+
+  - id: "HM-UC-038"
+    title: "Apply for Extended Stay"
+    description: "Student submits request for staying in hostel during institute vacation periods with faculty authorization letter, charge acknowledgment, and status tracking."
+    actors: "Primary: Student, Secondary: Caretaker, Warden, System"
+    preconditions: "Student is logged in with active hostel accommodation; vacation period is declared; no pending extended stay request for same period."
+    referenced_brs: ["BR-HM-061", "BR-HM-062", "BR-HM-063", "BR-HM-064", "BR-HM-065"]
+
+    happy_paths:
+      - scenario: "Student submits extended stay application with valid authorization and acknowledges charges"
+        preconditions: "Student meets eligibility per BR-HM-061; vacation period is active in system"
+        input_action: "POST /hostel/extended-stay with vacation_period_id, start_date, end_date, reason, authorization_file, terms_acknowledged=true"
+        expected_result: "Charges calculated and displayed; application recorded with status=Pending; Caretaker/Warden notified; acknowledgment sent to student"
+
+    alternate_paths:
+      - scenario: "Student modifies pending application with new authorization"
+        preconditions: "Application status is Pending and more than 48 hours before stay"
+        input_action: "PATCH /hostel/extended-stay/{id} with updated dates or new authorization"
+        expected_result: "Application updated; reset to Pending; staff notified of modification"
+      - scenario: "Student cancels approved application before stay start date"
+        preconditions: "Application is Approved; stay has not started"
+        input_action: "POST /hostel/extended-stay/{id}/cancel with reason, confirmation"
+        expected_result: "Status updated to Cancelled; room reservation released; Caretaker/Warden notified"
+
+    exception_paths:
+      - scenario: "Selected dates are outside declared vacation period"
+        preconditions: "Student selects dates beyond vacation window"
+        input_action: "POST /hostel/extended-stay with dates outside vacation period"
+        expected_result: "Validation error per BR-HM-062; application not submitted"
+      - scenario: "No faculty authorization uploaded"
+        preconditions: "Student fills form without uploading authorization"
+        input_action: "POST /hostel/extended-stay with authorization_file=null"
+        expected_result: "Validation error per BR-HM-063.a; application blocked"
+      - scenario: "Authorization file exceeds 5MB or wrong format"
+        preconditions: "Student uploads oversized or wrong format file"
+        input_action: "POST /hostel/extended-stay with file.size > 5MB or format not in [PDF,JPG,PNG]"
+        expected_result: "Upload rejected per BR-HM-063.d; student prompted to reupload"
+
+  - id: "HM-UC-039"
+    title: "Review and Approve Application"
+    description: "Caretaker or Warden reviews extended stay applications, verifies faculty authorization, checks room availability, reviews conduct, and approves or rejects."
+    actors: "Primary: Caretaker, Warden, Secondary: Student, System"
+    preconditions: "Caretaker/Warden is logged in; assigned to relevant hostel; at least one extended stay application with status=Pending exists."
+    referenced_brs: ["BR-HM-061", "BR-HM-066", "BR-HM-067"]
+
+    happy_paths:
+      - scenario: "Caretaker/Warden verifies valid authorization and approves application"
+        preconditions: "Authorization is valid; room is available; student conduct is acceptable"
+        input_action: "PATCH /hostel/extended-stay/{id}/decision with decision=Approved, comments=optional"
+        expected_result: "Application status updated to Approved; student notified with stay details and charges; room reserved for vacation period"
+
+    alternate_paths:
+      - scenario: "Emergency application flagged for expedited review"
+        preconditions: "Application is marked Urgent/Emergency"
+        input_action: "GET /hostel/extended-stay/{id} with urgency_flag=true"
+        expected_result: "Warden receives immediate notification; expedited review initiated; temporary approval may be granted pending full authorization within 48 hours"
+      - scenario: "Student appeals rejected application; Warden reviews"
+        preconditions: "Application is Rejected; student submits appeal with new evidence"
+        input_action: "POST /hostel/extended-stay/{id}/appeal with evidence, justification"
+        expected_result: "Warden reviews appeal; makes final decision (uphold or overturn); student notified; Warden decision is final"
+
+    exception_paths:
+      - scenario: "Authorization appears invalid or forged"
+        preconditions: "Reviewer detects suspicious authorization"
+        input_action: "POST /hostel/extended-stay/{id}/flag-authorization with reason"
+        expected_result: "Authorization marked Invalid per BR-HM-066.d; student contacted; application may be rejected or resubmission requested; disciplinary action initiated if forgery confirmed"
+      - scenario: "Room not available due to maintenance or capacity reached"
+        preconditions: "No rooms available during vacation period"
+        input_action: "GET /hostel/extended-stay/{id}/room-availability"
+        expected_result: "No Availability warning per BR-HM-067; alternative dates suggested or rejection with reason"
+
+  - id: "HM-UC-040"
+    title: "Manage Extended Stay Operations"
+    description: "System automatically reserves rooms, calculates charges, tracks payments, coordinates services, monitors presence, handles violations, and generates reports for extended stay students."
+    actors: "Primary: System, Secondary: Caretaker, Warden, Student"
+    preconditions: "Extended stay application is approved; vacation period dates are configured; charges and policies configured; payment tracking system is operational."
+    referenced_brs: ["BR-HM-064", "BR-HM-073", "BR-HM-074"]
+
+    happy_paths:
+      - scenario: "System completes full extended stay operations lifecycle"
+        preconditions: "Application is Approved; payment received; no violations"
+        input_action: "SYSTEM EVENT: application.status = Approved"
+        expected_result: "Room reserved; charges calculated and communicated; payment confirmed; services coordinated; presence monitored; stay completed; room released; reports generated"
+
+    alternate_paths:
+      - scenario: "Service plans adjusted when extended stay count changes"
+        preconditions: "Students cancel or new approvals added during vacation"
+        input_action: "SYSTEM EVENT: approved_count changes"
+        expected_result: "Mess, cleaning, and security services adjusted to match new expected count per BR-HM-074"
+
+    exception_paths:
+      - scenario: "Payment not received by deadline; approval revoked"
+        preconditions: "Payment deadline reached with payment_status != Paid"
+        input_action: "SYSTEM CHECK: payment deadline per BR-HM-073.d"
+        expected_result: "Final warning sent 24 hours before revocation; approval automatically revoked on stay start date; room reservation released"
+      - scenario: "Major violation during stay; extended stay terminated"
+        preconditions: "Serious rule violation reported"
+        input_action: "POST /hostel/extended-stay/{id}/violation with severity=Major"
+        expected_result: "Violation recorded; fine imposed; stay terminated; student asked to vacate immediately; violation affects future eligibility"

@@ -1,0 +1,1050 @@
+business_rules:
+
+  - id: "BR-HM-101"
+    title: "Leave Eligibility Based on Hostel Residency"
+    description: "A student MUST have an active hostel room allotment to submit a leave request."
+    type: "Constraint"
+    logic: "IF student.hostel_status != Active THEN reject leave submission"
+    used_in: ["HM-UC-001"]
+
+    valid_tests:
+      - input_action: "Submit leave request as student with active hostel allotment"
+        expected_result: "Request accepted for validation"
+
+    invalid_tests:
+      - input_action: "Submit leave request as student with vacated hostel status"
+        expected_result: "Request rejected with residency eligibility error"
+
+  - id: "BR-HM-102"
+    title: "Leave Date Boundary Validation"
+    description: "Leave end date MUST be the same as or later than leave start date."
+    type: "Constraint"
+    logic: "IF leave.end_date < leave.start_date THEN validation error"
+    used_in: ["HM-UC-001"]
+
+    valid_tests:
+      - input_action: "Submit leave with start_date=today and end_date=today+3"
+        expected_result: "Dates accepted"
+      - input_action: "Submit leave with start_date equal to end_date (same-day leave)"
+        expected_result: "Dates accepted"
+
+    invalid_tests:
+      - input_action: "Submit leave with end_date one day before start_date"
+        expected_result: "Validation error: end_date must be >= start_date"
+
+  - id: "BR-HM-103"
+    title: "Mandatory Leave Justification Policy"
+    description: "A leave request MUST include a reason. Supporting documents MUST be provided where mandated by policy."
+    type: "Constraint"
+    logic: "IF reason missing OR (documents required AND not uploaded) THEN reject submission"
+    used_in: ["HM-UC-001"]
+
+    valid_tests:
+      - input_action: "Submit leave with non-empty reason and required documents uploaded"
+        expected_result: "Submission accepted for processing"
+
+    invalid_tests:
+      - input_action: "Submit leave with empty reason field"
+        expected_result: "Submission rejected: reason is mandatory"
+      - input_action: "Submit leave with reason but mandatory documents not uploaded"
+        expected_result: "Submission rejected: supporting documents required"
+
+  - id: "BR-HM-104"
+    title: "Leave Decision Authority Enforcement"
+    description: "Only the assigned Caretaker MAY approve or reject leave requests for a hostel."
+    type: "Authorization"
+    logic: "IF user.role != Caretaker OR hostel mismatch THEN deny decision action"
+    used_in: ["HM-UC-002"]
+
+    valid_tests:
+      - input_action: "Assigned Caretaker approves leave request for their hostel"
+        expected_result: "Decision recorded and applied"
+
+    invalid_tests:
+      - input_action: "Caretaker from a different hostel attempts to approve leave request"
+        expected_result: "Action denied with authorization error"
+      - input_action: "Student or Warden attempts to approve a leave request"
+        expected_result: "Action denied with role mismatch error"
+
+  - id: "BR-HM-105"
+    title: "Attendance Synchronization on Leave Approval"
+    description: "Approved leave MUST automatically mark attendance as 'On Leave' for the approved period."
+    type: "Derivation"
+    logic: "IF leave.status = Approved THEN update attendance records for leave date range"
+    used_in: ["HM-UC-004"]
+
+    valid_tests:
+      - input_action: "Leave request status changes to Approved for 3-day period"
+        expected_result: "Attendance marked 'On Leave' for all 3 days automatically"
+
+    invalid_tests:
+      - input_action: "Leave request status is Rejected; attendance update triggered"
+        expected_result: "Attendance not updated; records remain unchanged"
+
+  - id: "BR-HM-106"
+    title: "Complaint Eligibility Rule"
+    description: "Only students with active hostel allotment MAY submit complaints."
+    type: "Constraint"
+    logic: "IF hostel_status != Active THEN reject complaint submission"
+    used_in: ["HM-UC-006"]
+
+    valid_tests:
+      - input_action: "Student with active hostel allotment submits complaint"
+        expected_result: "Complaint accepted"
+
+    invalid_tests:
+      - input_action: "Student whose hostel allotment is vacated submits complaint"
+        expected_result: "Complaint rejected with eligibility error"
+
+  - id: "BR-HM-107"
+    title: "Complaint Routing by Category"
+    description: "Security complaints MUST be routed to the Warden; all other categories MUST be routed to the Caretaker."
+    type: "Trigger, Authorization"
+    logic: "IF category = Security THEN notify Warden ELSE notify Caretaker"
+    used_in: ["HM-UC-006"]
+
+    valid_tests:
+      - input_action: "Submit complaint with category=Security"
+        expected_result: "Complaint routed to Warden with notification"
+      - input_action: "Submit complaint with category=Maintenance"
+        expected_result: "Complaint routed to Caretaker with notification"
+
+    invalid_tests:
+      - input_action: "Security complaint submitted without category set"
+        expected_result: "System cannot route; category is mandatory"
+
+  - id: "BR-HM-108"
+    title: "Mandatory Resolution Remarks"
+    description: "Resolution remarks MUST be recorded before marking a complaint as Resolved."
+    type: "Constraint"
+    logic: "IF status = Resolved AND remarks missing THEN block update"
+    used_in: ["HM-UC-007"]
+
+    valid_tests:
+      - input_action: "Caretaker marks complaint as Resolved with non-empty remarks"
+        expected_result: "Complaint status updated to Resolved; resolution recorded"
+
+    invalid_tests:
+      - input_action: "Caretaker attempts to mark complaint as Resolved with empty remarks"
+        expected_result: "Update blocked; error: resolution remarks are mandatory"
+
+  - id: "BR-HM-109"
+    title: "Escalation Authorization Rule"
+    description: "Only unresolved complaints (status=In-Progress) MAY be escalated to the Warden."
+    type: "Authorization"
+    logic: "IF status != In-Progress THEN block escalation"
+    used_in: ["HM-UC-008"]
+
+    valid_tests:
+      - input_action: "Escalate complaint with status=In-Progress"
+        expected_result: "Escalation processed; complaint status updated to Escalated"
+
+    invalid_tests:
+      - input_action: "Escalate complaint with status=Submitted (not yet investigated)"
+        expected_result: "Escalation blocked; complaint must be In-Progress first"
+      - input_action: "Escalate complaint with status=Resolved"
+        expected_result: "Escalation blocked; resolved complaints cannot be escalated"
+
+  - id: "BR-HM-110"
+    title: "Warden Authority on Escalated Complaints"
+    description: "Only Wardens MAY resolve escalated complaints."
+    type: "Authorization"
+    logic: "IF role != Warden THEN deny resolution action on escalated complaint"
+    used_in: ["HM-UC-009"]
+
+    valid_tests:
+      - input_action: "Warden resolves an escalated complaint with remarks"
+        expected_result: "Complaint resolved; actors notified"
+
+    invalid_tests:
+      - input_action: "Caretaker attempts to resolve an escalated complaint"
+        expected_result: "Action denied with authorization error; only Warden can resolve escalated complaints"
+
+  - id: "BR-HM-111"
+    title: "Application Window Enforcement"
+    description: "Accommodation requests MUST be submitted only during an active application window."
+    type: "Constraint"
+    logic: "IF window_status != Open THEN reject request"
+    used_in: ["HM-UC-010"]
+
+    valid_tests:
+      - input_action: "Student submits accommodation request when application window is Open"
+        expected_result: "Request accepted and recorded with status=Pending"
+
+    invalid_tests:
+      - input_action: "Student submits accommodation request when application window is Closed"
+        expected_result: "Request rejected: application window is not active"
+
+  - id: "BR-HM-112"
+    title: "Bulk Allotment Capacity Safeguard"
+    description: "Room occupancy MUST NOT exceed defined capacity. Over-allocation is blocked."
+    type: "Constraint"
+    logic: "IF occupancy >= capacity THEN block allotment"
+    used_in: ["HM-UC-011"]
+
+    valid_tests:
+      - input_action: "Allot rooms to students where total occupancy remains within capacity"
+        expected_result: "Allotment processed; occupancy updated"
+
+    invalid_tests:
+      - input_action: "Attempt to allot rooms that would result in occupancy exceeding capacity"
+        expected_result: "Allotment blocked with over-allocation error and capacity details"
+
+  - id: "BR-HM-113"
+    title: "Super Admin Allotment Authority"
+    description: "Only Super Admin MAY perform bulk room allotment."
+    type: "Authorization"
+    logic: "IF role != Super Admin THEN deny bulk allotment action"
+    used_in: ["HM-UC-011"]
+
+    valid_tests:
+      - input_action: "Super Admin initiates bulk room allotment"
+        expected_result: "Allotment process proceeds"
+
+    invalid_tests:
+      - input_action: "Caretaker or Warden attempts to initiate bulk room allotment"
+        expected_result: "Action denied with authorization error"
+
+  - id: "BR-HM-114"
+    title: "Mandatory Allotment Notification"
+    description: "Students MUST be notified immediately after room allotment."
+    type: "Trigger"
+    logic: "IF allotment completed THEN send notification to student"
+    used_in: ["HM-UC-012"]
+
+    valid_tests:
+      - input_action: "Bulk allotment completed for 50 students"
+        expected_result: "All 50 students receive notification with room details"
+
+    invalid_tests:
+      - input_action: "Allotment completed but notification system is disabled"
+        expected_result: "System retries notification; failure logged for admin review"
+
+  - id: "BR-HM-115"
+    title: "Room Change Eligibility Rule"
+    description: "Only students with active room allotment MAY request room change."
+    type: "Constraint"
+    logic: "IF room_status != Active THEN reject request"
+    used_in: ["HM-UC-013"]
+
+    valid_tests:
+      - input_action: "Student with active room allotment submits room change request"
+        expected_result: "Request accepted and recorded"
+
+    invalid_tests:
+      - input_action: "Student without active room allotment submits room change request"
+        expected_result: "Request rejected with eligibility error"
+
+  - id: "BR-HM-116"
+    title: "Dual Approval Requirement"
+    description: "Room change MUST be approved by both Caretaker and Warden. Missing either approval blocks reallocation."
+    type: "Constraint"
+    logic: "IF either caretaker.approval OR warden.approval is missing THEN block reallocation"
+    used_in: ["HM-UC-014"]
+
+    valid_tests:
+      - input_action: "Both Caretaker and Warden approve a room change request"
+        expected_result: "Reallocation proceeds"
+
+    invalid_tests:
+      - input_action: "Only Caretaker approves; Warden has not reviewed"
+        expected_result: "Reallocation blocked; dual approval required"
+      - input_action: "Only Warden approves; Caretaker has not reviewed"
+        expected_result: "Reallocation blocked; dual approval required"
+
+  - id: "BR-HM-117"
+    title: "Occupancy Reconciliation on Room Change"
+    description: "Occupancy MUST be updated for both old and new rooms when a room change is processed."
+    type: "Derivation"
+    logic: "Decrement occupancy of old_room; increment occupancy of new_room"
+    used_in: ["HM-UC-015"]
+
+    valid_tests:
+      - input_action: "Approved room change processed from Room A to Room B"
+        expected_result: "Room A occupancy decremented by 1; Room B occupancy incremented by 1"
+
+    invalid_tests:
+      - input_action: "Room change processed but occupancy update fails for old room"
+        expected_result: "System flags occupancy inconsistency; error logged for correction"
+
+  - id: "BR-HM-118"
+    title: "Mandatory Room Change Notification"
+    description: "Students MUST be notified of room change approval or rejection."
+    type: "Trigger"
+    logic: "IF room_change.status updated THEN send notification to student"
+    used_in: ["HM-UC-015"]
+
+    valid_tests:
+      - input_action: "Room change request approved; status updated"
+        expected_result: "Student notified with new room details"
+      - input_action: "Room change request rejected; status updated"
+        expected_result: "Student notified with rejection reason"
+
+    invalid_tests:
+      - input_action: "Room change status updated but notification service is unavailable"
+        expected_result: "Retry scheduled; failure logged"
+
+  - id: "BR-HM-008"
+    title: "Hostel Status Management"
+    description: "A hostel MUST NOT be deactivated if it has occupied rooms. A hostel MUST NOT be activated unless mandatory staff roles are assigned."
+    type: "Constraint"
+    logic: |
+      IF new_status = 'Inactive' AND occupied_room_count > 0 THEN block action.
+      IF new_status = 'Active' AND mandatory staff missing THEN block action.
+    used_in: ["HM-UC-020"]
+
+    valid_tests:
+      - input_action: "Activate hostel with assigned Warden and Caretaker and complete room config"
+        expected_result: "Hostel activated successfully"
+      - input_action: "Deactivate hostel with zero occupied rooms"
+        expected_result: "Hostel deactivated successfully"
+
+    invalid_tests:
+      - input_action: "Activate hostel without any assigned Warden"
+        expected_result: "Activation blocked: mandatory staff not assigned"
+      - input_action: "Deactivate hostel with 10 occupied rooms"
+        expected_result: "Deactivation blocked: hostel has 10 occupied rooms"
+
+  - id: "BR-HM-019"
+    title: "Staff Role Assignment Constraints"
+    description: "A hostel MUST have at least one active Warden and one active Caretaker before activation. Staff MUST NOT have overlapping assignments beyond defined limits."
+    type: "Constraint"
+    logic: |
+      Block hostel activation IF assigned_warden_count = 0 OR assigned_caretaker_count = 0.
+      Warn IF staff has concurrent active assignments.
+    used_in: ["HM-UC-021", "HM-UC-022"]
+
+    valid_tests:
+      - input_action: "Assign Warden to hostel that has no existing Warden"
+        expected_result: "Assignment created successfully"
+      - input_action: "Activate hostel that has both Warden and Caretaker assigned"
+        expected_result: "Activation proceeds"
+
+    invalid_tests:
+      - input_action: "Attempt to activate hostel with no Caretaker assigned"
+        expected_result: "Activation blocked: Caretaker is required"
+      - input_action: "Assign staff who already has an active concurrent assignment beyond limits"
+        expected_result: "System warns about concurrent assignment"
+
+  - id: "BR-HM-025"
+    title: "Hostel Configuration – Source of Truth"
+    description: "The hostel configuration stored in the Hostel Management Module MUST be treated as the single source of truth. Any operational action MUST reference the latest saved configuration."
+    type: "Constraint"
+    logic: "IF hostel.configuration is incomplete or outdated THEN block dependent operations and prompt configuration update"
+    used_in: ["HM-UC-019", "HM-UC-020"]
+
+    valid_tests:
+      - input_action: "Perform room allocation referencing latest complete hostel configuration"
+        expected_result: "Operation proceeds using authoritative configuration"
+
+    invalid_tests:
+      - input_action: "Attempt staff assignment when hostel configuration is incomplete"
+        expected_result: "Operation blocked; administrator prompted to complete hostel configuration"
+
+  - id: "BR-HM-012"
+    title: "Data Scoping by Role and Assignment"
+    description: "Role-based data visibility: Students see only their own data; Caretakers/Wardens see data for assigned hostels only; Super Admin has unrestricted visibility."
+    type: "Authorization"
+    logic: |
+      IF user.role = Student → restrict data to user.student_id.
+      IF user.role IN {Caretaker, Warden} → restrict data to user.assigned_hostels.
+      IF user.role = Super Admin → no restriction.
+    used_in: ["HM-UC-016", "HM-UC-017", "HM-UC-018", "HM-UC-021", "HM-UC-022", "HM-UC-023", "HM-UC-024", "HM-UC-025", "HM-UC-026", "HM-UC-027", "HM-UC-028"]
+
+    valid_tests:
+      - input_action: "Student requests their own fine records"
+        expected_result: "Only fines belonging to this student are returned"
+      - input_action: "Caretaker requests fine list for their assigned hostel"
+        expected_result: "Only fines from assigned hostel are returned"
+      - input_action: "Super Admin requests fine list for all hostels"
+        expected_result: "All fines across all hostels returned without restriction"
+
+    invalid_tests:
+      - input_action: "Student requests fine records of another student"
+        expected_result: "Access denied; only own data is visible"
+      - input_action: "Caretaker requests data from a hostel they are not assigned to"
+        expected_result: "Access denied; data scoped to assigned hostels only"
+
+  - id: "BR-HM-013"
+    title: "Fine Imposition Validation"
+    description: "A fine MUST have a positive numerical amount, a valid violation category, and a non-empty justification."
+    type: "Constraint"
+    logic: "IF fine.amount <= 0 OR fine.category IS NULL OR fine.reason IS EMPTY THEN block fine submission"
+    used_in: ["HM-UC-016"]
+
+    valid_tests:
+      - input_action: "Submit fine with amount=500, category=Hostel Rule Violation, reason=non-empty"
+        expected_result: "Fine recorded with status=Unpaid"
+
+    invalid_tests:
+      - input_action: "Submit fine with amount=0"
+        expected_result: "Validation error: fine amount must be positive"
+      - input_action: "Submit fine with amount=-100"
+        expected_result: "Validation error: fine amount must be positive"
+      - input_action: "Submit fine with category=null"
+        expected_result: "Validation error: violation category is required"
+      - input_action: "Submit fine with reason=''"
+        expected_result: "Validation error: justification reason is required"
+
+  - id: "BR-HM-014"
+    title: "Fine Lifecycle and Escalation Management"
+    description: "Fines are created with status=Unpaid. Status changes to Paid only after confirmed payment. Students exceeding fine thresholds are flagged for escalation."
+    type: "Constraint, Trigger"
+    logic: |
+      ON fine creation → SET status = 'Unpaid'.
+      IF payment confirmed → SET status = 'Paid'.
+      IF fine_count OR total_amount exceeds policy threshold → flag for escalation.
+    used_in: ["HM-UC-017", "HM-UC-018"]
+
+    valid_tests:
+      - input_action: "Create new fine record"
+        expected_result: "Fine created with status=Unpaid"
+      - input_action: "Confirm payment for unpaid fine"
+        expected_result: "Fine status updated to Paid"
+      - input_action: "Student's fine count exceeds policy threshold (e.g., 5 fines)"
+        expected_result: "Student flagged for escalation review"
+
+    invalid_tests:
+      - input_action: "Attempt to set fine status to Paid without payment confirmation"
+        expected_result: "Status change denied; payment verification required"
+
+  - id: "BR-HM-022"
+    title: "File Upload Validation"
+    description: "Uploaded files MUST be within the maximum allowed size and of an approved file type. Files failing validation MUST NOT be stored."
+    type: "Constraint"
+    logic: "IF file.size > max_size OR file.type NOT IN allowed_formats THEN reject upload"
+    used_in: ["HM-UC-016", "HM-UC-038"]
+
+    valid_tests:
+      - input_action: "Upload a 2MB PDF file as fine evidence"
+        expected_result: "File accepted and stored"
+
+    invalid_tests:
+      - input_action: "Upload a 10MB video file as fine evidence"
+        expected_result: "Upload rejected: file exceeds maximum size limit"
+      - input_action: "Upload a .exe file as evidence"
+        expected_result: "Upload rejected: unsupported file format"
+
+  - id: "BR-HM-016"
+    title: "Guard Shift Conflict Prevention"
+    description: "A security guard MUST NOT be assigned to overlapping shifts or consecutive shifts that violate maximum duty duration or rest policies."
+    type: "Constraint"
+    logic: "Reject assignment IF new_shift.time_range INTERSECTS with existing shift OR violates rest period rules"
+    used_in: ["HM-UC-024"]
+
+    valid_tests:
+      - input_action: "Assign guard to Morning shift (6AM-2PM); no other shifts assigned that day"
+        expected_result: "Assignment accepted"
+
+    invalid_tests:
+      - input_action: "Assign guard to Evening shift (2PM-10PM) when already assigned Morning shift (6AM-2PM) violating rest rules"
+        expected_result: "Assignment rejected with shift conflict error"
+      - input_action: "Assign guard to two overlapping shifts simultaneously"
+        expected_result: "Assignment rejected with overlap error"
+
+  - id: "BR-HM-026"
+    title: "Minimum Security Coverage Rules"
+    description: "Each security shift MUST meet or exceed the minimum guard count defined by policy. Minimum may vary based on hostel occupancy and special events."
+    type: "Constraint"
+    logic: "Block schedule confirmation IF assigned_guards.count < required_guard_count for the shift"
+    used_in: ["HM-UC-024"]
+
+    valid_tests:
+      - input_action: "Save schedule where all shifts meet minimum guard count"
+        expected_result: "Schedule saved successfully"
+
+    invalid_tests:
+      - input_action: "Save schedule where night shift has 0 guards assigned (minimum is 2)"
+        expected_result: "Save blocked; coverage gaps highlighted for correction"
+
+  - id: "BR-HM-027"
+    title: "Security Audit and Compliance Logging"
+    description: "All guard shift assignments and changes MUST be logged with timestamp and actor details. Logs MUST be retained per institutional policy."
+    type: "Constraint"
+    logic: "ON security_event → CREATE log_entry WITH actor, timestamp, action. ENFORCE retention_period during archival."
+    used_in: ["HM-UC-024", "HM-UC-025"]
+
+    valid_tests:
+      - input_action: "Warden saves guard shift schedule"
+        expected_result: "Audit log entry created with Warden ID, timestamp, and schedule details"
+      - input_action: "Guard assignment changed during active period"
+        expected_result: "Change logged with before/after details and actor identity"
+
+    invalid_tests:
+      - input_action: "Attempt to delete or modify a security audit log entry"
+        expected_result: "Log is immutable; modification denied"
+
+  - id: "BR-HM-021"
+    title: "Inventory Discrepancy Logging"
+    description: "Any inventory discrepancy identified during inspection MUST be logged with item details, discrepancy type, and observation remarks."
+    type: "Constraint"
+    logic: "IF inventory.actual_quantity != inventory.expected_quantity OR item.condition IN {Damaged, Missing} THEN create discrepancy record"
+    used_in: ["HM-UC-026"]
+
+    valid_tests:
+      - input_action: "Inspection finds 3 chairs missing from expected 10"
+        expected_result: "Discrepancy record created with item, type=Missing, quantity_difference=3, remarks"
+      - input_action: "Inspection finds damaged mattress"
+        expected_result: "Discrepancy logged with item, type=Damaged, and Caretaker remarks"
+
+    invalid_tests:
+      - input_action: "Inspection completed without logging a found discrepancy"
+        expected_result: "System flags missing discrepancy record; Caretaker prompted to log"
+
+  - id: "BR-HM-030"
+    title: "Resource Requirement Request Validation"
+    description: "A resource request MUST specify request type, item, quantity, and justification. Requested quantity MUST be a positive integer."
+    type: "Constraint"
+    logic: "IF request.type IS NULL OR request.item_id IS NULL OR request.quantity <= 0 OR request.justification IS EMPTY THEN reject submission"
+    used_in: ["HM-UC-027"]
+
+    valid_tests:
+      - input_action: "Submit resource request with type=Replacement, item=Bed, quantity=5, justification=non-empty"
+        expected_result: "Request accepted with status=Pending"
+
+    invalid_tests:
+      - input_action: "Submit resource request with quantity=0"
+        expected_result: "Validation error: quantity must be positive integer"
+      - input_action: "Submit resource request with missing justification"
+        expected_result: "Validation error: justification is required"
+      - input_action: "Submit resource request with request_type=null"
+        expected_result: "Validation error: request type is required"
+
+  - id: "BR-HM-031"
+    title: "Inventory Audit Trail Maintenance"
+    description: "Every inventory update MUST be logged with item details, action type, timestamp, and user identity. Audit logs MUST be immutable once recorded."
+    type: "Constraint"
+    logic: "ON inventory update → CREATE audit_log_entry with actor, timestamp, and change details"
+    used_in: ["HM-UC-028"]
+
+    valid_tests:
+      - input_action: "Caretaker updates inventory quantity for mattress from 10 to 8"
+        expected_result: "Audit log entry created: actor=Caretaker ID, action=Update, old_value=10, new_value=8, timestamp"
+
+    invalid_tests:
+      - input_action: "Attempt to edit or delete an existing inventory audit log entry"
+        expected_result: "Modification denied; logs are immutable"
+
+  - id: "BR-HM-015"
+    title: "Room Vacation Prerequisites"
+    description: "A student MUST NOT vacate their room until all clearance requirements are satisfied: all fines paid, no pending room damage assessments, all borrowed items returned, attendance reviewed. System MUST generate clearance checklist."
+    type: "Constraint"
+    logic: "IF student.outstanding_fines > 0 OR borrowed_items.status = 'Unreturned' OR room_damage.assessment = 'Pending' THEN block final vacation approval"
+    used_in: ["HM-UC-029", "HM-UC-030"]
+
+    valid_tests:
+      - input_action: "Student with zero outstanding fines, all items returned, no pending damage assessments submits vacation request"
+        expected_result: "Clearance checklist generated with all items green; vacation request proceeds"
+
+    invalid_tests:
+      - input_action: "Student with outstanding fine of 500 attempts to complete vacation clearance"
+        expected_result: "Clearance blocked: outstanding fines must be paid first"
+      - input_action: "Student with unreturned borrowed items attempts to complete vacation"
+        expected_result: "Clearance blocked: all borrowed items must be returned"
+      - input_action: "Student with pending room damage assessment attempts to complete vacation"
+        expected_result: "Clearance blocked: pending damage assessment must be resolved"
+
+  - id: "BR-HM-023"
+    title: "Room Availability Update"
+    description: "Room status MUST be updated to 'Available' immediately upon successful deallocation. Update MUST be atomic and synchronized with deallocation transaction."
+    type: "Action Enabler"
+    logic: "WHEN room deallocation completed THEN UPDATE room.status = 'Available' AND UPDATE room.last_vacated_date = current_timestamp AND room.available_for_allocation = TRUE"
+    used_in: ["HM-UC-031"]
+
+    valid_tests:
+      - input_action: "Super Admin finalizes room vacation; room deallocated"
+        expected_result: "Room status immediately updated to Available; last_vacated_date recorded"
+
+    invalid_tests:
+      - input_action: "Room deallocation fails midway; partial update"
+        expected_result: "Transaction rolled back; room status remains unchanged; error logged"
+
+  - id: "BR-HM-028"
+    title: "Vacation Finalization Prerequisites"
+    description: "Vacation finalization MUST NOT proceed unless clearance status is 'Approved', clearance certificate is issued, and all checklist items are marked 'Cleared' with zero pending items."
+    type: "Constraint"
+    logic: "IF clearance.status != 'Approved' OR certificate.issued = FALSE OR pending_items.count > 0 THEN block finalization"
+    used_in: ["HM-UC-031"]
+
+    valid_tests:
+      - input_action: "Finalize vacation where clearance=Approved, certificate=issued, pending_items=0"
+        expected_result: "Finalization proceeds; room deallocated"
+
+    invalid_tests:
+      - input_action: "Attempt finalization when clearance status is still Pending"
+        expected_result: "Finalization blocked: 'Prerequisites not satisfied'"
+      - input_action: "Attempt finalization when 2 checklist items are still pending"
+        expected_result: "Finalization blocked: all clearance items must be resolved"
+
+  - id: "BR-HM-029"
+    title: "Notice Content Validation"
+    description: "Notice title MUST be 5-200 characters. Notice description MUST be 20-5000 characters. Content MUST NOT contain profanity or inappropriate language."
+    type: "Constraint"
+    logic: "IF title.length < 5 OR title.length > 200 OR description.length < 20 OR description.length > 5000 OR contains_inappropriate_content = TRUE THEN reject notice"
+    used_in: ["HM-UC-032"]
+
+    valid_tests:
+      - input_action: "Publish notice with title='Mess Menu Update' (16 chars) and description of 50 characters"
+        expected_result: "Notice accepted for publication"
+
+    invalid_tests:
+      - input_action: "Publish notice with title='Hi' (2 chars)"
+        expected_result: "Validation error: title must be between 5-200 characters"
+      - input_action: "Publish notice with description of 10 characters"
+        expected_result: "Validation error: description must be at least 20 characters"
+      - input_action: "Publish notice containing profanity in description"
+        expected_result: "Validation error: inappropriate content detected"
+
+  - id: "BR-HM-033"
+    title: "Notice Priority Levels"
+    description: "Valid priority levels: Normal, Important, Urgent. Urgent notices display with red banner and immediate push notifications. Important notices display with orange highlight at top. Normal notices use standard formatting."
+    type: "Inference"
+    logic: |
+      IF priority = 'Urgent' THEN display_with_red_banner() AND send_immediate_push_notification()
+      ELSE IF priority = 'Important' THEN display_with_orange_highlight() AND prioritize_at_top()
+      ELSE display_with_standard_format()
+    used_in: ["HM-UC-032"]
+
+    valid_tests:
+      - input_action: "Publish notice with priority=Urgent"
+        expected_result: "Notice shown with red banner; immediate push notifications sent to all targeted students"
+      - input_action: "Publish notice with priority=Important"
+        expected_result: "Notice highlighted with orange indicator; appears at top of notice board"
+      - input_action: "Publish notice with priority=Normal"
+        expected_result: "Notice displayed with standard formatting; no special highlight"
+
+    invalid_tests:
+      - input_action: "Publish notice with priority=Critical (invalid value)"
+        expected_result: "Validation error: priority must be one of Normal, Important, Urgent"
+
+  - id: "BR-HM-035"
+    title: "Notice Display Rules"
+    description: "Notices displayed in priority order (Urgent first, then Important, then Normal), then by publication date. Students only see notices for their hostel or All Students. Expired notices do not appear on active board."
+    type: "Inference"
+    logic: "SELECT notices WHERE (notice.hostel_id = student.hostel_id OR notice.target = 'All Students') AND current_date BETWEEN notice.start_date AND notice.end_date ORDER BY priority DESC, publish_date DESC"
+    used_in: ["HM-UC-033"]
+
+    valid_tests:
+      - input_action: "Student from Hostel A views notice board"
+        expected_result: "Only notices for Hostel A and All Students shown; ordered Urgent → Important → Normal, newest first within each"
+      - input_action: "Expired notice with end_date=yesterday exists in database"
+        expected_result: "Expired notice does not appear on active notice board"
+
+    invalid_tests:
+      - input_action: "Student from Hostel A tries to access notices for Hostel B"
+        expected_result: "Access denied per BR-HM-039; only own hostel notices visible"
+
+  - id: "BR-HM-039"
+    title: "Student Notice Access Rights"
+    description: "Students MUST only access notices for their assigned hostel or All Students. Students have read-only access; cannot edit or delete notices."
+    type: "Authorization"
+    logic: "IF user.role = 'Student' THEN allow_view WHERE (notice.hostel_id = student.hostel_id OR notice.target = 'All Students') AND deny edit/delete operations"
+    used_in: ["HM-UC-033"]
+
+    valid_tests:
+      - input_action: "Student reads a notice targeted to their hostel"
+        expected_result: "Notice content displayed successfully; notice marked as read"
+
+    invalid_tests:
+      - input_action: "Student attempts to edit a notice"
+        expected_result: "Action denied; students have read-only access to notices"
+      - input_action: "Student attempts to access notice from another hostel directly via URL"
+        expected_result: "Access denied; not authorized for this notice"
+
+  - id: "BR-HM-050"
+    title: "Report Retention Policy"
+    description: "All submitted reports MUST be retained for minimum 3 academic years. Comprehensive and disciplinary reports MUST be retained for 7 years. Reports approaching expiry are flagged for review."
+    type: "Constraint"
+    logic: "IF report.submission_date + retention_period < current_date THEN flag_for_archival_review(); IF approved_for_deletion THEN move_to_cold_storage()"
+    used_in: ["HM-UC-035"]
+
+    valid_tests:
+      - input_action: "Standard leave report submitted 4 years ago flagged for archival review"
+        expected_result: "System flags report; admin reviews before archiving or extending"
+      - input_action: "Comprehensive hostel report submitted 6 years ago (7-year retention applies)"
+        expected_result: "Report retained; not yet eligible for archival"
+
+    invalid_tests:
+      - input_action: "Attempt to delete disciplinary report submitted 2 years ago (7-year retention)"
+        expected_result: "Deletion denied; report must be retained for 7 years"
+
+  - id: "BR-HM-051"
+    title: "Guest Room Booking Eligibility"
+    description: "Student must have active hostel accommodation, no outstanding fines exceeding grace amount, no serious disciplinary actions, and maximum 3 concurrent bookings."
+    type: "Constraint"
+    logic: "IF student.hostel_status = 'Active' AND outstanding_fines <= grace_amount AND disciplinary_status != 'Serious' AND COUNT(active_bookings) < 3 THEN allow booking ELSE reject"
+    used_in: ["HM-UC-036", "HM-UC-037"]
+
+    valid_tests:
+      - input_action: "Student with active allotment, no fines, no disciplinary issues, and 0 active bookings submits request"
+        expected_result: "Booking request accepted"
+
+    invalid_tests:
+      - input_action: "Student with outstanding fines exceeding grace amount submits booking"
+        expected_result: "Booking rejected: outstanding fines exceed grace amount"
+      - input_action: "Student already has 3 active bookings submits another"
+        expected_result: "Booking rejected: maximum concurrent bookings limit reached"
+      - input_action: "Student with active serious disciplinary action submits booking"
+        expected_result: "Booking rejected: serious disciplinary action on record"
+
+  - id: "BR-HM-052"
+    title: "Booking Date Validation"
+    description: "Check-in date must not be in the past, check-out must be after check-in, check-in within allowed advance period, and duration must not exceed maximum stay."
+    type: "Constraint"
+    logic: "IF check_in_date < current_date OR check_out_date <= check_in_date OR check_in_date > (current_date + advance_period) OR duration > maximum_stay THEN reject"
+    used_in: ["HM-UC-036"]
+
+    valid_tests:
+      - input_action: "Submit booking with check_in=today+3, check_out=today+5 (2-night stay)"
+        expected_result: "Booking dates accepted"
+
+    invalid_tests:
+      - input_action: "Submit booking with check_in_date=yesterday"
+        expected_result: "Rejected: check-in date cannot be in the past"
+      - input_action: "Submit booking with check_out_date = check_in_date (zero-night stay)"
+        expected_result: "Rejected: check-out must be after check-in"
+
+  - id: "BR-HM-053"
+    title: "Guest Information Requirements"
+    description: "Guest full name must be provided, at least one contact method (phone or email) required, phone must be valid 10-digit format, email must be valid format, visit purpose minimum 10 characters."
+    type: "Constraint"
+    logic: "IF guest.name.isEmpty() OR (guest.phone.isEmpty() AND guest.email.isEmpty()) OR visit.purpose.length < 10 THEN reject"
+    used_in: ["HM-UC-036"]
+
+    valid_tests:
+      - input_action: "Submit booking with guest_name='John Doe', phone='9876543210', purpose='Attending cousin graduation ceremony'"
+        expected_result: "Guest information accepted"
+
+    invalid_tests:
+      - input_action: "Submit booking with guest_name=empty"
+        expected_result: "Rejected: guest name is required"
+      - input_action: "Submit booking with no phone and no email for guest"
+        expected_result: "Rejected: at least one contact method required"
+      - input_action: "Submit booking with purpose='Visit' (5 chars)"
+        expected_result: "Rejected: purpose must be at least 10 characters"
+
+  - id: "BR-HM-054"
+    title: "Advance Booking Period"
+    description: "Guest room bookings MUST be made at least 2 days in advance and cannot be made more than 30 days in advance. Caretaker may override minimum for emergencies."
+    type: "Constraint"
+    logic: "IF (check_in - current_date) < 2 THEN reject (unless emergency_override) ELSE IF (check_in - current_date) > 30 THEN reject"
+    used_in: ["HM-UC-036"]
+
+    valid_tests:
+      - input_action: "Submit booking with check_in = today+5 (5 days advance)"
+        expected_result: "Booking accepted"
+
+    invalid_tests:
+      - input_action: "Submit booking with check_in = tomorrow (1 day advance) without emergency override"
+        expected_result: "Rejected: minimum 2 days advance booking required"
+      - input_action: "Submit booking with check_in = today+35 (35 days advance)"
+        expected_result: "Rejected: exceeds maximum 30-day advance booking limit"
+
+  - id: "BR-HM-055"
+    title: "Maximum Booking Duration"
+    description: "Maximum guest room stay is 7 consecutive nights. Students must wait at least 3 days before making new booking after completing previous stay."
+    type: "Constraint"
+    logic: "IF (check_out - check_in) > 7 AND NOT warden_exception THEN reject AND suggest splitting. IF previous_booking.check_out + 3 > current_date THEN reject"
+    used_in: ["HM-UC-036"]
+
+    valid_tests:
+      - input_action: "Submit booking for 5 consecutive nights"
+        expected_result: "Booking accepted"
+
+    invalid_tests:
+      - input_action: "Submit booking for 10 consecutive nights without Warden exception"
+        expected_result: "Rejected: maximum 7 nights per booking; suggests splitting"
+      - input_action: "Submit new booking 2 days after previous stay checkout (gap < 3 days)"
+        expected_result: "Rejected: minimum 3-day gap required between bookings"
+
+  - id: "BR-HM-056"
+    title: "Guest Identity Verification"
+    description: "Caretaker MUST verify guest identity using valid government-issued ID at check-in. ID proof details MUST be recorded. Check-in cannot proceed without successful verification."
+    type: "Constraint"
+    logic: "WHEN guest_check_in_initiated THEN verify_id() AND IF valid THEN record_id_details() AND allow_check_in() ELSE deny_check_in()"
+    used_in: ["HM-UC-037"]
+
+    valid_tests:
+      - input_action: "Guest presents valid Aadhar Card at check-in"
+        expected_result: "Identity verified; ID details recorded; check-in allowed"
+
+    invalid_tests:
+      - input_action: "Guest attempts check-in with no ID proof"
+        expected_result: "Check-in denied; identity verification is mandatory"
+      - input_action: "Guest presents expired or invalid ID document"
+        expected_result: "Check-in denied; valid government-issued ID required"
+
+  - id: "BR-HM-057"
+    title: "Room Inspection Standards"
+    description: "Caretaker MUST conduct physical inspection at check-out covering furniture, walls, floor, bathroom, electrical fixtures, cleanliness. Damages MUST be documented with photos. Inspection results MUST be recorded with timestamp."
+    type: "Inference"
+    logic: "WHEN check_out_initiated THEN caretaker_performs_inspection(checklist) AND IF damage_found THEN document(photos, description, cost) AND create_fine() ELSE mark_complete()"
+    used_in: ["HM-UC-037"]
+
+    valid_tests:
+      - input_action: "Caretaker completes room inspection checklist at check-out; no damages found"
+        expected_result: "Inspection recorded as complete with timestamp; booking marked Completed"
+      - input_action: "Caretaker finds damaged window and documents with photos and cost estimate"
+        expected_result: "Damage documented; fine created and linked to booking"
+
+    invalid_tests:
+      - input_action: "Attempt to complete check-out without conducting room inspection"
+        expected_result: "Check-out blocked; room inspection is mandatory"
+
+  - id: "BR-HM-058"
+    title: "Damage Assessment Rules"
+    description: "Damages categorized as Minor, Moderate, Major, or Severe. Fine based on repair/replacement cost + admin charges. Major/Severe damages must be escalated to Warden. Student given 48 hours to contest."
+    type: "Inference"
+    logic: "WHEN damage_assessed THEN categorize_severity() AND calculate_fine(repair_cost + admin_fee) AND IF severity IN [Major, Severe] THEN escalate_to_warden() AND notify_student(contest_option=48h)"
+    used_in: ["HM-UC-037"]
+
+    valid_tests:
+      - input_action: "Caretaker assesses Minor scratch damage; imposes fine with repair cost"
+        expected_result: "Fine imposed directly; student notified with contest option"
+      - input_action: "Caretaker assesses Severe structural damage"
+        expected_result: "Fine calculated; damage escalated to Warden for review; student notified with 48-hour contest window"
+
+    invalid_tests:
+      - input_action: "Fine imposed for Major damage without Warden escalation"
+        expected_result: "Process error; Major/Severe damages require Warden review"
+
+  - id: "BR-HM-059"
+    title: "Guest Room Charges"
+    description: "Charges calculated as (nights × per_night_rate) + additional facility charges. Discounts apply for extended stays (7+ nights) or faculty-sponsored visits. All charges displayed before booking confirmation."
+    type: "Constraint"
+    logic: "total = (nights × rate) + cleaning + facility_charges; IF nights >= 7 THEN apply extended_stay_discount; display_to_student before confirmation"
+    used_in: ["HM-UC-037"]
+
+    valid_tests:
+      - input_action: "Submit 3-night booking; charges calculated and displayed before confirmation"
+        expected_result: "Charge breakdown shown: nights × rate + facility charges; student confirms"
+      - input_action: "Submit 7-night booking; extended stay discount applied"
+        expected_result: "Discount applied to base charges; final amount displayed"
+
+    invalid_tests:
+      - input_action: "Booking confirmation submitted without displaying charges to student first"
+        expected_result: "Process error; charges must be shown before confirmation"
+
+  - id: "BR-HM-061"
+    title: "Extended Stay Eligibility"
+    description: "Student must have active hostel accommodation, be in good academic standing, no outstanding fines exceeding threshold, valid faculty authorization, and no extended stay violations in last academic year."
+    type: "Constraint"
+    logic: "IF hostel_status='Active' AND academic_standing='Good' AND fines<=threshold AND authorization=TRUE AND no_violations_in_last_year=TRUE THEN allow ELSE reject"
+    used_in: ["HM-UC-038", "HM-UC-039"]
+
+    valid_tests:
+      - input_action: "Student with active allotment, good academic standing, no fines, and valid authorization applies"
+        expected_result: "Application accepted for review"
+
+    invalid_tests:
+      - input_action: "Student on academic probation applies for extended stay"
+        expected_result: "Application rejected: not in good academic standing"
+      - input_action: "Student with extended stay violation in last year applies"
+        expected_result: "Application rejected: ineligible for 1 academic year due to previous violation"
+
+  - id: "BR-HM-062"
+    title: "Vacation Period Validation"
+    description: "Extended stay dates MUST fall completely within a declared vacation period. System MUST validate alignment before accepting application."
+    type: "Constraint"
+    logic: "IF application.start_date < vacation.start_date OR application.end_date > vacation.end_date OR start >= end THEN reject"
+    used_in: ["HM-UC-038"]
+
+    valid_tests:
+      - input_action: "Student applies for stay within officially declared Dec 20 - Jan 5 vacation period"
+        expected_result: "Dates accepted"
+
+    invalid_tests:
+      - input_action: "Student applies with end_date one day after vacation period ends"
+        expected_result: "Rejected: dates must fall within declared vacation period"
+      - input_action: "Student applies for dates when no vacation period is declared"
+        expected_result: "Rejected: no active vacation period for selected dates"
+
+  - id: "BR-HM-063"
+    title: "Authorization Requirements"
+    description: "Students MUST upload valid faculty authorization letter. Must be from recognized faculty, state student name and stay period, in PDF/JPG/PNG under 5MB, dated within 30 days of submission."
+    type: "Constraint"
+    logic: "IF authorization.uploaded=FALSE OR format NOT IN [PDF,JPG,PNG] OR size > 5MB OR authorization.date < (application.date - 30_days) THEN reject"
+    used_in: ["HM-UC-038"]
+
+    valid_tests:
+      - input_action: "Upload valid PDF authorization letter, 2MB, dated 10 days ago from recognized faculty"
+        expected_result: "Authorization accepted"
+
+    invalid_tests:
+      - input_action: "Submit application without uploading authorization"
+        expected_result: "Rejected: faculty authorization letter is mandatory"
+      - input_action: "Upload authorization dated 45 days ago (outside 30-day window)"
+        expected_result: "Rejected: authorization must be dated within 30 days of application"
+
+  - id: "BR-HM-064"
+    title: "Extended Stay Charges Calculation"
+    description: "Charges = (days × per_day_vacation_rate) + facility charges + applicable taxes. System MUST display complete charge breakdown before submission. Charges calculated automatically on date selection."
+    type: "Inference"
+    logic: "stay_days = (end - start); base = days × rate; total = base + facility + (base × tax_rate); display breakdown"
+    used_in: ["HM-UC-038", "HM-UC-040"]
+
+    valid_tests:
+      - input_action: "Student selects 10-day stay; system calculates charges automatically"
+        expected_result: "Breakdown displayed: base = 10 × per_day_rate, + facility charges, + taxes = total"
+
+    invalid_tests:
+      - input_action: "Application submitted before charge breakdown is displayed to student"
+        expected_result: "Process error; charges must be shown and acknowledged"
+
+  - id: "BR-HM-065"
+    title: "Application Modification Rules"
+    description: "Students can modify applications only when status is Pending. Approved applications cannot be modified. Modifications within 48 hours of stay start require Caretaker approval. Each modification resets to Pending."
+    type: "Constraint"
+    logic: "IF status='Pending' AND (start - current) > 2 days THEN allow; IF within 48h THEN require_caretaker_approval; IF status='Approved' THEN deny, suggest cancellation"
+    used_in: ["HM-UC-038"]
+
+    valid_tests:
+      - input_action: "Student modifies pending application 5 days before stay start"
+        expected_result: "Modification accepted; application reset to Pending"
+
+    invalid_tests:
+      - input_action: "Student attempts to modify an Approved application"
+        expected_result: "Modification denied; must cancel and create new application"
+
+  - id: "BR-HM-066"
+    title: "Authorization Verification Standards"
+    description: "Caretaker/Warden MUST verify faculty authorization authenticity including signature, faculty status, date validity, and tampering check. Suspicious documents flagged for direct verification. Forgery triggers rejection and disciplinary action."
+    type: "Constraint"
+    logic: "verify_signature() AND check_faculty_status() AND IF suspicion THEN flag_for_verification() AND IF forgery THEN reject() AND initiate_disciplinary_action()"
+    used_in: ["HM-UC-039"]
+
+    valid_tests:
+      - input_action: "Reviewer verifies authorization with valid signature and active faculty status"
+        expected_result: "Authorization confirmed as valid; review proceeds"
+
+    invalid_tests:
+      - input_action: "Authorization shows signs of tampering or invalid faculty signature"
+        expected_result: "Flagged for direct verification with faculty; application held pending confirmation"
+
+  - id: "BR-HM-067"
+    title: "Room Availability During Vacation"
+    description: "Maximum 30% of total hostel capacity can be allocated for extended stays. If maximum reached, subsequent applications go to waitlist. Caretaker must verify physical availability."
+    type: "Constraint"
+    logic: "IF (approved_count / total_capacity) >= 0.30 THEN move_new_applications_to_waitlist() ELSE IF room_physically_available THEN allow_approval() ELSE suggest_alternative_dates()"
+    used_in: ["HM-UC-039"]
+
+    valid_tests:
+      - input_action: "Approve application when only 20% of hostel is allocated for extended stays"
+        expected_result: "Approval proceeds; room reserved"
+
+    invalid_tests:
+      - input_action: "Attempt to approve application when 30% capacity already allocated"
+        expected_result: "Application moved to waitlist: 'Capacity reached'"
+
+  - id: "BR-HM-073"
+    title: "Payment Deadline Policy"
+    description: "Extended stay charges MUST be paid within 3 days of approval or 7 days before stay start date, whichever is earlier. Unpaid applications have approval revoked on stay start date."
+    type: "Constraint"
+    logic: "deadline = MIN(approval+3days, start-7days); IF unpaid at deadline THEN send_24h_warning(); IF unpaid on start_date THEN revoke_approval()"
+    used_in: ["HM-UC-040"]
+
+    valid_tests:
+      - input_action: "Student pays within 3 days of approval"
+        expected_result: "Payment confirmed; extended stay proceeds"
+
+    invalid_tests:
+      - input_action: "Student does not pay by payment deadline; stay start date arrives"
+        expected_result: "Approval automatically revoked; room reservation released; student notified"
+
+  - id: "BR-HM-074"
+    title: "Vacation Services Coordination"
+    description: "Caretaker MUST coordinate mess, cleaning, and security services based on confirmed extended stay count. Service planning reports generated 7 days before vacation. Service adjusted if count changes."
+    type: "Inference"
+    logic: "WHEN vacation_starts_in_7_days THEN generate_occupancy_report() AND plan_mess() AND schedule_cleaning() AND ensure_security() AND IF count_changes THEN adjust_services()"
+    used_in: ["HM-UC-040"]
+
+    valid_tests:
+      - input_action: "7 days before vacation, system generates occupancy report with 15 approved students"
+        expected_result: "Service planning initiated for 15 students; mess, cleaning, and 24/7 security scheduled"
+
+    invalid_tests:
+      - input_action: "Extended stay approved but no services coordinated for vacation period"
+        expected_result: "Process gap flagged; Caretaker alerted to complete service coordination"
+
+  - id: "BR-HM-040"
+    title: "Report Generation Authorization"
+    description: "Only Warden, Caretaker, or Super Admin can generate reports. Caretakers limited to assigned hostel; Wardens to supervised hostels; Super Admin unrestricted. All generation activities logged."
+    type: "Authorization"
+    logic: "IF role='Super Admin' THEN allow all ELSE IF role IN [Warden, Caretaker] AND hostel IN assigned_hostels THEN allow ELSE deny"
+    used_in: ["HM-UC-034"]
+
+    valid_tests:
+      - input_action: "Caretaker generates report for their assigned hostel"
+        expected_result: "Report generation permitted and logged"
+
+    invalid_tests:
+      - input_action: "Caretaker attempts to generate report for a hostel they are not assigned to"
+        expected_result: "Access denied: insufficient permissions"
+      - input_action: "Student attempts to generate a hostel report"
+        expected_result: "Access denied: only Warden, Caretaker, and Super Admin can generate reports"
+
+  - id: "BR-HM-043"
+    title: "Report Filter Rules"
+    description: "Reports support filtering by hostel, student group, room, status, and date range. Filters combined using AND logic. At least one filter required for targeted reports. Filter templates can be saved."
+    type: "Inference"
+    logic: "IF report.type != 'Comprehensive' THEN require at least one filter AND apply AND logic; IF save_template THEN store filter combination"
+    used_in: ["HM-UC-034"]
+
+    valid_tests:
+      - input_action: "Generate report with hostel_id and date_range filters applied"
+        expected_result: "Report generated with both filters applied as AND condition"
+      - input_action: "Save filter combination as template named 'Monthly Q1'"
+        expected_result: "Template saved for reuse"
+
+    invalid_tests:
+      - input_action: "Generate targeted report with no filter criteria specified"
+        expected_result: "Validation error: at least one filter criterion required"
+
+  - id: "BR-HM-044"
+    title: "Report Content Standards"
+    description: "All reports MUST include standard header (title, date range, generation timestamp, generator name), summary statistics section, appropriate data visualizations, and data source attribution."
+    type: "Inference"
+    logic: "WHEN generating THEN include_standard_header() AND generate_summary() AND create_visualizations() AND add_detailed_tables() AND include_footer_with_metadata()"
+    used_in: ["HM-UC-034"]
+
+    valid_tests:
+      - input_action: "Generate Attendance Summary Report"
+        expected_result: "Report includes: header with title/date/timestamp/generator, summary statistics, bar charts, detailed tables, footnotes explaining calculations"
+
+    invalid_tests:
+      - input_action: "Report generated without summary statistics section"
+        expected_result: "Report generation error; summary section is mandatory"
+
+  - id: "BR-HM-045"
+    title: "Report Submission Authorization"
+    description: "Only Wardens can submit reports to Super Admin. Caretakers must submit to their assigned Warden. Report must be in Generated status. All submissions logged."
+    type: "Authorization"
+    logic: "IF role='Warden' AND report.status='Generated' THEN allow submit_to_super_admin() ELSE IF role='Caretaker' THEN allow submit_to_warden() ELSE deny"
+    used_in: ["HM-UC-035"]
+
+    valid_tests:
+      - input_action: "Warden submits Generated report to Super Admin"
+        expected_result: "Submission accepted; Super Admin notified; submission logged with timestamp"
+
+    invalid_tests:
+      - input_action: "Caretaker attempts to submit report directly to Super Admin"
+        expected_result: "Denied: Caretakers must submit to their Warden"
+      - input_action: "Warden attempts to submit report with status=Draft"
+        expected_result: "Denied: report must be in Generated status before submission"
+
+  - id: "BR-HM-046"
+    title: "Report Review Hierarchy"
+    description: "Reports submitted by Wardens MUST be reviewed by Super Admin. Super Admin can request clarification, approve, or reject. Super Admin's decision is final."
+    type: "Inference"
+    logic: "WHEN report submitted THEN assign_to_super_admin() AND IF clarification_needed THEN return_to_warden() ELSE IF approved THEN mark_approved() ELSE mark_rejected()"
+    used_in: ["HM-UC-035"]
+
+    valid_tests:
+      - input_action: "Super Admin reviews and approves submitted report"
+        expected_result: "Report marked Approved; Warden notified; report archived"
+      - input_action: "Super Admin requests clarification; Warden provides details and resubmits"
+        expected_result: "Report returned to Warden; resubmitted; Super Admin re-reviews"
+
+    invalid_tests:
+      - input_action: "Warden attempts to appeal Super Admin's rejection decision"
+        expected_result: "Appeal not possible; Super Admin decision is final"

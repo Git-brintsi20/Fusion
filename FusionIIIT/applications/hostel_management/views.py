@@ -1,8 +1,11 @@
 from django.core.serializers import serialize
 from django.http import HttpResponseBadRequest
-from .models import HostelLeave, HallCaretaker
-from applications.hostel_management.models import HallCaretaker, HallWarden
+from .models import HostelLeave
 from django.http import JsonResponse, HttpResponse
+from django.utils import timezone
+from django.conf import settings
+from django.core.files.storage import FileSystemStorage
+import os
 from django.db import IntegrityError
 from rest_framework.exceptions import NotFound
 from django.shortcuts import redirect
@@ -13,7 +16,6 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import render, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.permissions import IsAuthenticated
-from .models import HallCaretaker, HallWarden
 from django.urls import reverse
 from .models import StudentDetails
 from rest_framework.exceptions import APIException
@@ -59,6 +61,23 @@ from django.db.models import Q
 from django.contrib import messages
 from .utils import render_to_pdf, save_worker_report_sheet, get_caretaker_hall
 from .utils import add_to_room, remove_from_room
+from .selectors import (
+    get_all_halls,
+    get_available_rooms_for_halls,
+    get_guest_rooms_map,
+    get_hall_staff_assignments_map,
+    get_halls_attendance_map,
+    get_halls_notices_map,
+    get_halls_staff_schedules_map,
+    get_halls_students_map,
+    get_pending_guest_room_requests_map,
+)
+from .services import (
+    build_student_details_for_hall,
+    get_staff_assigned_hall,
+    is_user_faculty,
+    is_user_staff,
+)
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -79,10 +98,68 @@ from notification.views import hostel_notifications
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.db import transaction
+from rest_framework.authtoken.models import Token
 
 
 def is_superuser(user):
     return user.is_authenticated and user.is_superuser
+
+
+def _get_request_user(request):
+    user = getattr(request, "user", None)
+    if user and getattr(user, "is_authenticated", False):
+        return user
+
+    auth_header = request.headers.get("Authorization") or ""
+    if auth_header.lower().startswith("token "):
+        token_key = auth_header.split(" ", 1)[1].strip()
+        token = (
+            Token.objects.select_related("user")
+            .filter(key=token_key)
+            .first()
+        )
+        if token:
+            return token.user
+
+    return None
+
+
+@csrf_exempt
+def delete_fine_api(request, fine_id):
+    if request.method not in ["DELETE", "POST"]:
+        return JsonResponse({"error": "Method not allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    if not hasattr(user, "extrainfo") and not user.is_superuser:
+        return JsonResponse({"error": "You are not authorized."}, status=403)
+
+    hall_id = None
+    if hasattr(user, "extrainfo"):
+        staff_id = user.extrainfo.id
+        caretaker = HallCaretaker.objects.filter(staff_id=staff_id).first()
+        if caretaker:
+            hall_id = caretaker.hall_id
+        else:
+            warden = HallWarden.objects.filter(faculty_id=staff_id).first()
+            if warden:
+                hall_id = warden.hall_id
+
+    if hall_id is None and not user.is_superuser:
+        return JsonResponse({"error": "You are not authorized."}, status=403)
+
+    try:
+        if hall_id is None:
+            fine = HostelFine.objects.get(fine_id=fine_id)
+        else:
+            fine = HostelFine.objects.get(fine_id=fine_id, hall_id=hall_id)
+    except HostelFine.DoesNotExist:
+        return JsonResponse({"error": "Hostel fine not found."}, status=404)
+
+    fine.delete()
+    return JsonResponse({"message": "Fine deleted successfully."}, status=200)
 
 
 # //! My change
@@ -107,63 +184,40 @@ def hostel_view(request, context={}):
     # Check if the user is a superuser
     is_superuser = request.user.is_superuser
 
-    all_hall = Hall.objects.all()
-    halls_student = {}
-    for hall in all_hall:
-        halls_student[hall.hall_id] = Student.objects.filter(
-            hall_no=int(hall.hall_id[4])).select_related('id__user')
-
-    hall_staffs = {}
-    for hall in all_hall:
-        hall_staffs[hall.hall_id] = StaffSchedule.objects.filter(
-            hall=hall).select_related('staff_id__id__user')
+    all_hall = list(get_all_halls())
+    halls_student = get_halls_students_map(all_hall)
+    hall_staffs = get_halls_staff_schedules_map(all_hall)
 
     all_notice = HostelNoticeBoard.objects.all().order_by("-id")
-    hall_notices = {}
-    for hall in all_hall:
-        hall_notices[hall.hall_id] = HostelNoticeBoard.objects.filter(
-            hall=hall).select_related('hall', 'posted_by__user')
+    hall_notices = get_halls_notices_map(all_hall)
+    pending_guest_room_requests = get_pending_guest_room_requests_map(all_hall)
+    guest_rooms = get_guest_rooms_map(all_hall)
+    user_guest_room_requests = GuestRoomBooking.objects.filter(intender=request.user).order_by(
+        "-arrival_date"
+    )
 
-    pending_guest_room_requests = {}
-    for hall in all_hall:
-        pending_guest_room_requests[hall.hall_id] = GuestRoomBooking.objects.filter(
-            hall=hall, status='Pending').select_related('hall', 'intender')
-        
-       
-    guest_rooms = {}
-    for hall in all_hall:
-        guest_rooms[hall.hall_id] = GuestRoom.objects.filter(
-            hall=hall,vacant=True).select_related('hall')
-    user_guest_room_requests = GuestRoomBooking.objects.filter(
-        intender=request.user).order_by("-arrival_date")
+    assignments = get_hall_staff_assignments_map(all_hall)
 
-    halls = Hall.objects.all()
     # Create a list to store additional details
     hostel_details = []
+    for hall in all_hall:
+        caretaker = assignments.get(hall.hall_id, {}).get("caretaker")
+        warden = assignments.get(hall.hall_id, {}).get("warden")
 
-    # Loop through each hall and fetch assignedCaretaker and assignedWarden
-    for hall in halls:
-        try:
-            caretaker = HallCaretaker.objects.filter(hall=hall).first()
-            warden = HallWarden.objects.filter(hall=hall).first()
-        except HostelAllotment.DoesNotExist:
-            assigned_caretaker = None
-            assigned_warden = None
-
-        vacant_seat=(hall.max_accomodation-hall.number_students)
-        hostel_detail = {
-            'hall_id': hall.hall_id,
-            'hall_name': hall.hall_name,
-            'seater_type':hall.type_of_seater,
-            'max_accomodation': hall.max_accomodation,
-            'number_students': hall.number_students,
-            'vacant_seat':vacant_seat,
-            'assigned_batch': hall.assigned_batch,
-            'assigned_caretaker': caretaker.staff.id.user.username if caretaker else None,
-            'assigned_warden': warden.faculty.id.user.username if warden else None,
-        }
-
-        hostel_details.append(hostel_detail)
+        vacant_seat = hall.max_accomodation - hall.number_students
+        hostel_details.append(
+            {
+                'hall_id': hall.hall_id,
+                'hall_name': hall.hall_name,
+                'seater_type': hall.type_of_seater,
+                'max_accomodation': hall.max_accomodation,
+                'number_students': hall.number_students,
+                'vacant_seat': vacant_seat,
+                'assigned_batch': hall.assigned_batch,
+                'assigned_caretaker': caretaker.staff.id.user.username if caretaker else None,
+                'assigned_warden': warden.faculty.id.user.username if warden else None,
+            }
+        )
 
     Staff_obj = Staff.objects.all().select_related('id__user')
     hall1 = Hall.objects.get(hall_id='hall1')
@@ -172,28 +226,20 @@ def hostel_view(request, context={}):
     hall1_staff = StaffSchedule.objects.filter(hall=hall1)
     hall3_staff = StaffSchedule.objects.filter(hall=hall3)
     hall4_staff = StaffSchedule.objects.filter(hall=hall4)
-    hall_caretakers = HallCaretaker.objects.all().select_related()
-    hall_wardens = HallWarden.objects.all().select_related()
+    hall_caretakers = HallCaretaker.objects.select_related('hall', 'staff__id__user')
+    hall_wardens = HallWarden.objects.select_related('hall', 'faculty__id__user')
+
     all_students = Student.objects.all().select_related('id__user')
-    all_students_id = []
-    for student in all_students:
-        all_students_id.append(student.id_id)
+    all_students_id = list(all_students.values_list('id_id', flat=True))
     # print(all_students)
     hall_student = ""
     current_hall = ""
-    get_avail_room = []
-    get_hall = get_caretaker_hall(hall_caretakers, request.user)
-    if get_hall:
-        get_hall_num = re.findall('[0-9]+', str(get_hall.hall_id))
-        hall_student = Student.objects.filter(hall_no=int(
-            str(get_hall_num[0]))).select_related('id__user')
-        current_hall = 'hall'+str(get_hall_num[0])
+    get_avail_room = get_available_rooms_for_halls(all_hall)
 
-    for hall in all_hall:
-        total_rooms = HallRoom.objects.filter(hall=hall)
-        for room in total_rooms:
-            if (room.room_cap > room.room_occupied):
-                get_avail_room.append(room)
+    assigned_hall = get_staff_assigned_hall(request.user)
+    if assigned_hall:
+        hall_student = halls_student.get(assigned_hall.hall_id, [])
+        current_hall = assigned_hall.hall_id
 
     hall_caretaker_user = []
     for caretaker in hall_caretakers:
@@ -202,11 +248,6 @@ def hostel_view(request, context={}):
     hall_warden_user = []
     for warden in hall_wardens:
         hall_warden_user.append(warden.faculty.id.user)
-
-    all_students = Student.objects.all().select_related('id__user')
-    all_students_id = []
-    for student in all_students:
-        all_students_id.append(student.id_id)
 
     todays_date = date.today()
     current_year = todays_date.year
@@ -219,11 +260,7 @@ def hostel_view(request, context={}):
         worker_report = WorkerReport.objects.filter(
             hall__hall_id=current_hall, year=current_year-1, month=12)
 
-    attendance = HostelStudentAttendence.objects.all().select_related()
-    halls_attendance = {}
-    for hall in all_hall:
-        halls_attendance[hall.hall_id] = HostelStudentAttendence.objects.filter(
-            hall=hall).select_related()
+    halls_attendance = get_halls_attendance_map(all_hall)
 
     user_complaints = HostelComplaint.objects.filter(
         roll_number=request.user.username)
@@ -243,31 +280,27 @@ def hostel_view(request, context={}):
 
     # //! My change for imposing fines
     user_id = request.user
-    staff_fine_caretaker = user_id.extrainfo.id
-    students = Student.objects.all()
+    try:
+        staff_fine_caretaker = user_id.extrainfo.id
+    except Exception:
+        staff_fine_caretaker = None
+    students = all_students
 
     fine_user = request.user
 
-    if request.user.id in Staff.objects.values_list('id__user', flat=True):
-        staff_fine_caretaker = request.user.extrainfo.id
-
-        caretaker_fine_id = HallCaretaker.objects.filter(
-            staff_id=staff_fine_caretaker).first()
+    if is_user_staff(request.user) and staff_fine_caretaker:
+        caretaker_fine_id = HallCaretaker.objects.filter(staff_id=staff_fine_caretaker).first()
         if caretaker_fine_id:
             hall_fine_id = caretaker_fine_id.hall_id
-            hostel_fines = HostelFine.objects.filter(
-                hall_id=hall_fine_id).order_by('fine_id')
+            hostel_fines = HostelFine.objects.filter(hall_id=hall_fine_id).order_by('fine_id')
             context['hostel_fines'] = hostel_fines
 
     # caretaker_fine_id = HallCaretaker.objects.get(staff_id=staff_fine_caretaker)
     # hall_fine_id = caretaker_fine_id.hall_id
     # hostel_fines = HostelFine.objects.filter(hall_id=hall_fine_id).order_by('fine_id')
 
-    if request.user.id in Staff.objects.values_list('id__user', flat=True):
-        staff_inventory_caretaker = request.user.extrainfo.id
-
-        caretaker_inventory_id = HallCaretaker.objects.filter(
-            staff_id=staff_inventory_caretaker).first()
+    if is_user_staff(request.user) and staff_fine_caretaker:
+        caretaker_inventory_id = HallCaretaker.objects.filter(staff_id=staff_fine_caretaker).first()
 
         if caretaker_inventory_id:
             hall_inventory_id = caretaker_inventory_id.hall_id
@@ -290,94 +323,28 @@ def hostel_view(request, context={}):
             context['inventories'] = inventory_data
 
     # all students details for caretaker and warden
-    if request.user.id in Staff.objects.values_list('id__user', flat=True):
-        staff_student_info = request.user.extrainfo.id
+    if is_user_staff(request.user) and staff_fine_caretaker:
+        caretaker_assignment = (
+            HallCaretaker.objects.filter(staff_id=staff_fine_caretaker)
+            .select_related('hall')
+            .first()
+        )
+        if caretaker_assignment:
+            payload = build_student_details_for_hall(
+                caretaker_assignment.hall, include_available_rooms=True
+            )
+            context['hostel_students_details'] = payload['students']
+            context['av_room'] = payload.get('available_rooms', [])
 
-        if HallCaretaker.objects.filter(staff_id=staff_student_info).exists():
-            hall_caretaker_id = HallCaretaker.objects.get(
-                staff_id=staff_student_info).hall_id
-
-            hall_num = Hall.objects.get(id=hall_caretaker_id)
-            hall_number = int(''.join(filter(str.isdigit,hall_num.hall_id)))
-
-            
-            # hostel_students_details = Student.objects.filter(hall_no=hall_number)
-            # context['hostel_students_details']= hostel_students_details
-
-            hostel_students_details = []
-            students = Student.objects.filter(hall_no=hall_number)
-
-            a_room=[]
-            t_rooms = HallRoom.objects.filter(hall=hall_num)
-            for room in t_rooms:
-                if (room.room_cap > room.room_occupied):
-                    a_room.append(room)
-
-            # print(a_room)
-            # Retrieve additional information for each student
-            for student in students:
-                student_info = {}
-                student_info['student_id'] = student.id.id
-                student_info['first_name'] = student.id.user.first_name
-                student_info['programme'] = student.programme
-                student_info['batch'] = student.batch
-                student_info['hall_number'] = student.hall_no
-                student_info['room_number'] = student.room_no
-                student_info['specialization'] = student.specialization
-                # student_info['parent_contact'] = student.parent_contact
-                
-                # Fetch address and phone number from ExtraInfo model
-                extra_info = ExtraInfo.objects.get(user=student.id.user)
-                student_info['address'] = extra_info.address
-                student_info['phone_number'] = extra_info.phone_no
-                
-                hostel_students_details.append(student_info)
-
-            # Sort the hostel_students_details list by roll number
-            hostel_students_details = sorted(hostel_students_details, key=lambda x: x['student_id'])
-            
-            
-            context['hostel_students_details'] = hostel_students_details
-            context['av_room'] = a_room
-
-    if request.user.id in Faculty.objects.values_list('id__user', flat=True):
-        staff_student_info = request.user.extrainfo.id    
-        if HallWarden.objects.filter(faculty_id=staff_student_info).exists():
-            hall_warden_id = HallWarden.objects.get(
-                faculty_id=staff_student_info).hall_id
-
-            hall_num = Hall.objects.get(id=hall_warden_id)
-
-            hall_number = int(''.join(filter(str.isdigit,hall_num.hall_id)))
-            
-            # hostel_students_details = Student.objects.filter(hall_no=hall_number)
-            # context['hostel_students_details']= hostel_students_details
-
-            hostel_students_details = []
-            students = Student.objects.filter(hall_no=hall_number)
-
-            # Retrieve additional information for each student
-            for student in students:
-                student_info = {}
-                student_info['student_id'] = student.id.id
-                student_info['first_name'] = student.id.user.first_name
-                student_info['programme'] = student.programme
-                student_info['batch'] = student.batch
-                student_info['hall_number'] = student.hall_no
-                student_info['room_number'] = student.room_no
-                student_info['specialization'] = student.specialization
-                # student_info['parent_contact'] = student.parent_contact
-                
-                # Fetch address and phone number from ExtraInfo model
-                extra_info = ExtraInfo.objects.get(user=student.id.user)
-                student_info['address'] = extra_info.address
-                student_info['phone_number'] = extra_info.phone_no
-                
-                hostel_students_details.append(student_info)
-                hostel_students_details = sorted(hostel_students_details, key=lambda x: x['student_id'])
-
-
-            context['hostel_students_details'] = hostel_students_details
+    if is_user_faculty(request.user) and staff_fine_caretaker:
+        warden_assignment = (
+            HallWarden.objects.filter(faculty_id=staff_fine_caretaker)
+            .select_related('hall')
+            .first()
+        )
+        if warden_assignment:
+            payload = build_student_details_for_hall(warden_assignment.hall)
+            context['hostel_students_details'] = payload['students']
 
             
 
@@ -496,7 +463,7 @@ def staff_delete_schedule(request):
     return HttpResponseRedirect(reverse("hostelmanagement:hostel_view"))
 
 
-@login_required
+@csrf_exempt
 def notice_board(request):
     """
     This function is used to create a form to show the notice on the Notice Board.
@@ -510,23 +477,79 @@ def notice_board(request):
       description - stores description of the notice.
     """
     if request.method == "POST":
-        form = HostelNoticeBoardForm(request.POST, request.FILES)
+        accepts_json = "application/json" in (request.headers.get("Accept") or "")
+        user = _get_request_user(request)
 
-        if form.is_valid():
-            hall = form.cleaned_data['hall']
-            head_line = form.cleaned_data['head_line']
-            content = form.cleaned_data['content']
-            description = form.cleaned_data['description']
+        if not user:
+            if accepts_json:
+                return JsonResponse({"error": "Authentication required."}, status=401)
+            return redirect(LOGIN_URL)
 
-            new_notice = HostelNoticeBoard.objects.create(hall=hall, posted_by=request.user.extrainfo, head_line=head_line, content=content,
-                                                          description=description)
+        if not hasattr(user, "extrainfo"):
+            if accepts_json:
+                return JsonResponse({"error": "User profile missing."}, status=403)
+            messages.error(request, "User profile missing.")
+            return HttpResponseRedirect(reverse("hostelmanagement:hostel_view"))
 
-            new_notice.save()
-            messages.success(request, 'Notice created successfully.')
+        hall_id = request.POST.get("hall") or request.POST.get("hall_id")
+        head_line = (
+            request.POST.get("head_line")
+            or request.POST.get("headline")
+            or request.POST.get("title")
+        )
+        description = request.POST.get("description") or ""
+        content = request.FILES.get("content") or request.FILES.get("file")
+
+        hall = None
+        if hall_id:
+            hall = Hall.objects.filter(hall_id=hall_id).first()
+            if hall is None:
+                hall = Hall.objects.filter(pk=hall_id).first()
+        if hall is None:
+            hall = get_staff_assigned_hall(user)
+
+        if not hall or not head_line:
+            if accepts_json:
+                return JsonResponse(
+                    {"error": "hall and head_line are required."}, status=400
+                )
+            messages.error(request, "Please provide hall and headline.")
+            return HttpResponseRedirect(reverse("hostelmanagement:hostel_view"))
+
+        try:
+            new_notice = HostelNoticeBoard.objects.create(
+                hall=hall,
+                posted_by=user.extrainfo,
+                head_line=head_line,
+                content=content,
+                description=description,
+            )
+        except Exception:
+            if accepts_json:
+                return JsonResponse(
+                    {"error": "Failed to create notice."}, status=500
+                )
+            messages.error(request, "Failed to create notice.")
+            return HttpResponseRedirect(reverse("hostelmanagement:hostel_view"))
+
+        if accepts_json:
+            return JsonResponse(
+                {
+                    "id": new_notice.id,
+                    "hall_id": new_notice.hall.hall_id,
+                    "posted_by": new_notice.posted_by.user.username,
+                    "head_line": new_notice.head_line,
+                    "content": new_notice.content.url if new_notice.content else None,
+                    "description": new_notice.description,
+                },
+                status=201,
+            )
+
+        messages.success(request, "Notice created successfully.")
         return HttpResponseRedirect(reverse("hostelmanagement:hostel_view"))
 
 
-@login_required
+@csrf_exempt
 def delete_notice(request):
     """
     This function is responsible for deleting ana existing notice from the notice board.
@@ -538,10 +561,251 @@ def delete_notice(request):
       notice - stores HostelNoticeBoard object related to 'notice_id'
     """
     if request.method == 'POST':
-        notice_id = request.POST["dlt_notice"]
-        notice = HostelNoticeBoard.objects.get(pk=notice_id)
+        accepts_json = "application/json" in (request.headers.get("Accept") or "")
+        user = _get_request_user(request)
+
+        if not user:
+            if accepts_json:
+                return JsonResponse({"error": "Authentication required."}, status=401)
+            return redirect(LOGIN_URL)
+
+        notice_id = None
+        if request.content_type and "application/json" in request.content_type:
+            try:
+                payload = json.loads(request.body.decode("utf-8") or "{}")
+                notice_id = (
+                    payload.get("dlt_notice")
+                    or payload.get("id")
+                    or payload.get("notice_id")
+                )
+            except Exception:
+                notice_id = None
+
+        if notice_id is None:
+            notice_id = (
+                request.POST.get("dlt_notice")
+                or request.POST.get("id")
+                or request.POST.get("notice_id")
+            )
+        if not notice_id:
+            if accepts_json:
+                return JsonResponse({"error": "id is required."}, status=400)
+            messages.error(request, "Notice id is required.")
+            return HttpResponseRedirect(reverse("hostelmanagement:hostel_view"))
+
+        notice = HostelNoticeBoard.objects.filter(pk=notice_id).first()
+        if not notice:
+            if accepts_json:
+                return JsonResponse({"error": "Notice not found."}, status=404)
+            messages.error(request, "Notice not found.")
+            return HttpResponseRedirect(reverse("hostelmanagement:hostel_view"))
+
         notice.delete()
+        if accepts_json:
+            return JsonResponse({"status": "ok"}, status=200)
     return HttpResponseRedirect(reverse("hostelmanagement:hostel_view"))
+
+
+@csrf_exempt
+def update_notice(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST requests are allowed."}, status=405)
+
+    accepts_json = "application/json" in (request.headers.get("Accept") or "")
+    user = _get_request_user(request)
+
+    if not user:
+        if accepts_json:
+            return JsonResponse({"error": "Authentication required."}, status=401)
+        return redirect(LOGIN_URL)
+
+    notice_id = None
+    if request.content_type and "application/json" in request.content_type:
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+            notice_id = payload.get("id") or payload.get("notice_id")
+        except Exception:
+            notice_id = None
+
+    if notice_id is None:
+        notice_id = request.POST.get("id") or request.POST.get("notice_id")
+
+    if not notice_id:
+        return JsonResponse({"error": "id is required."}, status=400)
+
+    notice = HostelNoticeBoard.objects.filter(pk=notice_id).first()
+    if not notice:
+        return JsonResponse({"error": "Notice not found."}, status=404)
+
+    head_line = (
+        request.POST.get("head_line")
+        or request.POST.get("headline")
+        or request.POST.get("title")
+    )
+    description = request.POST.get("description")
+    content = request.FILES.get("content") or request.FILES.get("file")
+
+    updated = False
+    if head_line is not None and head_line != "":
+        notice.head_line = head_line
+        updated = True
+    if description is not None:
+        notice.description = description
+        updated = True
+    if content is not None:
+        notice.content = content
+        updated = True
+
+    if not updated:
+        return JsonResponse({"error": "No fields to update."}, status=400)
+
+    notice.save()
+    return JsonResponse({"status": "ok"}, status=200)
+
+
+@csrf_exempt
+def hostel_complaints_api(request):
+    if request.method != "GET":
+        return JsonResponse({"error": "Only GET requests are allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    complaints = HostelComplaint.objects.all()
+
+    status_value = (request.GET.get("status") or "").strip().lower()
+    status_value = status_value.replace(" ", "_")
+    if status_value:
+        if status_value not in {"open", "in_progress", "resolved"}:
+            return JsonResponse({"error": "Invalid status value."}, status=400)
+        complaints = complaints.filter(status__iexact=status_value)
+
+    category_value = (request.GET.get("category") or "").strip()
+    if category_value:
+        complaints = complaints.filter(category__iexact=category_value)
+
+    search_value = (request.GET.get("search") or "").strip()
+    if search_value:
+        complaints = complaints.filter(
+            Q(student_name__icontains=search_value)
+            | Q(roll_number__icontains=search_value)
+            | Q(description__icontains=search_value)
+            | Q(contact_number__icontains=search_value)
+            | Q(hall_name__icontains=search_value)
+            | Q(category__icontains=search_value)
+        )
+
+    sort_value = (request.GET.get("sort") or "created_desc").strip()
+    sort_map = {
+        "created_desc": "-created_at",
+        "created_asc": "created_at",
+        "updated_desc": "-updated_at",
+        "updated_asc": "updated_at",
+        "status_asc": "status",
+        "status_desc": "-status",
+        "id_desc": "-id",
+        "id_asc": "id",
+    }
+    order_by = sort_map.get(sort_value, "-created_at")
+    complaints = complaints.order_by(order_by)
+
+    data = []
+    for complaint in complaints:
+        data.append(
+            {
+                "id": complaint.id,
+                "hall_name": complaint.hall_name,
+                "student_name": complaint.student_name,
+                "roll_number": complaint.roll_number,
+                "description": complaint.description,
+                "contact_number": complaint.contact_number,
+                "category": complaint.category,
+                "image_upload": complaint.image_upload.url if complaint.image_upload else "",
+                "created_at": complaint.created_at.isoformat() if complaint.created_at else "",
+                "status": complaint.status,
+                "updated_at": complaint.updated_at.isoformat() if complaint.updated_at else "",
+            }
+        )
+
+    return JsonResponse({"complaints": data}, status=200)
+
+
+@csrf_exempt
+def update_hostel_complaint_status(request, complaint_id):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST requests are allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    payload_status = None
+    if request.content_type and "application/json" in request.content_type:
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+            payload_status = payload.get("status")
+        except Exception:
+            payload_status = None
+
+    new_status = (payload_status or request.POST.get("status") or "").strip().lower()
+    new_status = new_status.replace(" ", "_")
+    if new_status not in {"open", "in_progress", "resolved"}:
+        return JsonResponse({"error": "Invalid status value."}, status=400)
+
+    complaint = HostelComplaint.objects.filter(pk=complaint_id).first()
+    if not complaint:
+        return JsonResponse({"error": "Complaint not found."}, status=404)
+
+    complaint.status = new_status
+    complaint.updated_at = timezone.now()
+    complaint.save(update_fields=["status", "updated_at"])
+
+    return JsonResponse({"status": "ok"}, status=200)
+
+
+@csrf_exempt
+def assign_rooms_by_warden(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST requests are allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    uploaded_file = request.FILES.get("file") or request.FILES.get("upload_rooms")
+    if not uploaded_file:
+        return JsonResponse({"error": "file is required."}, status=400)
+
+    batch = request.POST.get("selectedBatch") or request.POST.get("batch")
+
+    upload_dir = os.path.join(
+        settings.MEDIA_ROOT, "hostel_management", "allotments"
+    )
+    storage = FileSystemStorage(location=upload_dir)
+    saved_name = storage.save(uploaded_file.name, uploaded_file)
+    file_url = storage.url(saved_name)
+
+    return JsonResponse(
+        {
+            "message": "File uploaded successfully.",
+            "file": file_url,
+            "batch": batch,
+        },
+        status=200,
+    )
+
+
+@csrf_exempt
+def update_student_allotment(request):
+    if request.method not in ["GET", "POST"]:
+        return JsonResponse({"error": "Only GET/POST requests are allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    return JsonResponse({"message": "Student allotment updated."}, status=200)
 
 
 def edit_student_rooms_sheet(request):
@@ -829,9 +1093,26 @@ class GeneratePDF(View):
 
 
 def hostel_notice_board(request):
-    notices = all().values('id', 'hall', 'posted_by',
-                           'head_line', 'content', 'description')
-    data = list(notices)
+    notices = HostelNoticeBoard.objects.all().select_related('hall', 'posted_by')
+    data = []
+    for notice in notices:
+        content_name = notice.content.name if notice.content else ''
+        content_url = (
+            request.build_absolute_uri(notice.content.url)
+            if notice.content
+            else ''
+        )
+        data.append(
+            {
+                'id': notice.id,
+                'hall': notice.hall_id,
+                'posted_by': notice.posted_by_id,
+                'head_line': notice.head_line,
+                'content': content_name,
+                'content_url': content_url,
+                'description': notice.description,
+            }
+        )
     return JsonResponse(data, safe=False)
 
 
@@ -851,43 +1132,65 @@ def all_leave_data(request):
         return HttpResponse('<script>alert("You are not authorized to access this page"); window.location.href = "/hostelmanagement/"</script>')
 
 
-@login_required
+@csrf_exempt
 def create_hostel_leave(request):
-    
-    if request.method == 'GET':
-        return render(request, 'hostelmanagement/create_leave.html')
-    elif request.method == 'POST':
-        data = request.POST  # Assuming you are sending form data via POST request
-        student_name = data.get('student_name')
-        roll_num = data.get('roll_num')
-        phone_number = data.get('phone_number')  # Retrieve phone number from form data
-        reason = data.get('reason')
-        start_date = data.get('start_date', timezone.now())
-        end_date = data.get('end_date')
-        
+    wants_json = (
+        "application/json" in (request.headers.get("Accept") or "")
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or bool(request.headers.get("Authorization"))
+    )
 
-        # Create HostelLeave object and save to the database
-        leave = HostelLeave.objects.create(
-            student_name=student_name,
-            roll_num=roll_num,
-            phone_number=phone_number,  # Include phone number in the object creation
-            reason=reason,
-            start_date=start_date,
-            end_date=end_date,
-            
+    user = _get_request_user(request)
+    if not user:
+        if wants_json:
+            return JsonResponse({"message": "Authentication required."}, status=401)
+        return HttpResponse(
+            '<script>alert("You are not authorized to access this page"); '
+            'window.location.href = "/hostelmanagement/";</script>'
         )
-        caretakers = HallCaretaker.objects.all()
-        sender = request.user
-        type = "leave_request"
-        for caretaker in caretakers:
-            try:
-                # Send notification
-                hostel_notifications(sender, caretaker.staff.id.user, type)
-            except Exception as e:
-                # Handle notification sending error
-                print(f"Error sending notification to caretaker {caretaker.staff.user.username}: {e}")
 
-        return JsonResponse({'message': 'HostelLeave created successfully'}, status=status.HTTP_201_CREATED)
+    if request.method == "GET":
+        return render(request, "hostelmanagement/create_leave.html")
+    if request.method != "POST":
+        return JsonResponse({"message": "Only POST requests are allowed."}, status=405)
+
+    if request.content_type and "application/json" in request.content_type:
+        try:
+            data = json.loads(request.body.decode("utf-8") or "{}")
+        except Exception:
+            data = {}
+    else:
+        data = request.POST
+
+    student_name = data.get("student_name")
+    roll_num = data.get("roll_num")
+    phone_number = data.get("phone_number")
+    reason = data.get("reason")
+    start_date = data.get("start_date", timezone.now())
+    end_date = data.get("end_date")
+
+    HostelLeave.objects.create(
+        student_name=student_name,
+        roll_num=roll_num,
+        phone_number=phone_number,
+        reason=reason,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    caretakers = HallCaretaker.objects.all()
+    sender = user
+    type = "leave_request"
+    for caretaker in caretakers:
+        try:
+            hostel_notifications(sender, caretaker.staff.id.user, type)
+        except Exception as e:
+            print(
+                "Error sending notification to caretaker "
+                f"{caretaker.staff.user.username}: {e}"
+            )
+
+    return JsonResponse({"message": "HostelLeave created successfully"}, status=status.HTTP_201_CREATED)
 
 # hostel_complaints_list caretaker can see all hostel complaints
 
@@ -937,41 +1240,90 @@ def get_students(request):
 
 
 class PostComplaint(APIView):
-    # Assuming you are using session authentication
-    authentication_classes = [SessionAuthentication]
-    # Allow only authenticated users to access the view
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = []
 
     def dispatch(self, request, *args, **kwargs):
-        # print(request.user.username)
-        if not request.user.is_authenticated:
-            # Redirect to the login page if user is not authenticated
-            return redirect('/hostelmanagement')
+        user = _get_request_user(request)
+        if not user:
+            return JsonResponse({"error": "Authentication required."}, status=401)
+        request._complaints_user = user
         return super().dispatch(request, *args, **kwargs)
 
     def get(self, request):
-        return render(request, 'hostelmanagement/post_complaint_form.html')
+        user = request._complaints_user
+        roll_number = user.username
+        complaints = HostelComplaint.objects.filter(
+            roll_number__iexact=roll_number
+        ).order_by("-id")
+
+        data = []
+        for complaint in complaints:
+            data.append(
+                {
+                    "id": complaint.id,
+                    "hall_name": complaint.hall_name,
+                    "student_name": complaint.student_name,
+                    "roll_number": complaint.roll_number,
+                    "description": complaint.description,
+                    "contact_number": complaint.contact_number,
+                    "category": complaint.category,
+                    "image_upload": complaint.image_upload.url if complaint.image_upload else "",
+                    "created_at": complaint.created_at.isoformat() if complaint.created_at else "",
+                    "status": complaint.status,
+                    "updated_at": complaint.updated_at.isoformat() if complaint.updated_at else "",
+                }
+            )
+
+        return JsonResponse({"complaints": data}, status=200)
 
     def post(self, request):
-        hall_name = request.data.get('hall_name')
-        student_name = request.data.get('student_name')
-        roll_number = request.data.get('roll_number')
-        description = request.data.get('description')
-        contact_number = request.data.get('contact_number')
+        user = request._complaints_user
+        roll_number = user.username
+        category = request.data.get("category") or "General"
+        description = request.data.get("description") or ""
+        image_upload = request.FILES.get("image_upload")
 
-        # Assuming the student's name is stored in the user object
-        student_name = request.user.username
+        if not description.strip():
+            return JsonResponse({"error": "Description is required."}, status=400)
+
+        student = Student.objects.filter(id_id=roll_number).select_related("id__user").first()
+        hall_name = None
+        if student and getattr(student, "hall_no", None):
+            hall = Hall.objects.filter(hall_id=f"hall{student.hall_no}").first()
+            hall_name = hall.hall_name if hall else f"hall{student.hall_no}"
+
+        if not hall_name:
+            hall_name = "Unknown"
+
+        contact_number = None
+        try:
+            contact_number = user.extrainfo.phone_no
+        except Exception:
+            contact_number = None
+
+        student_name = user.get_full_name() or user.username
 
         complaint = HostelComplaint.objects.create(
             hall_name=hall_name,
             student_name=student_name,
             roll_number=roll_number,
-            description=description,
-            contact_number=contact_number
+            description=description.strip(),
+            contact_number=contact_number,
+            category=category,
+            image_upload=image_upload,
+            status="open",
         )
 
-        # Use JavaScript to display a pop-up message after submission
-        return HttpResponse('<script>alert("Complaint submitted successfully"); window.location.href = "/hostelmanagement";</script>')
+        return JsonResponse(
+            {
+                "message": "Complaint submitted successfully.",
+                "complaint_id": complaint.id,
+                "status": complaint.status,
+                "created_at": complaint.created_at.isoformat() if complaint.created_at else "",
+            },
+            status=201,
+        )
 
 
 # // student can see his leave status
@@ -1671,9 +2023,9 @@ class HostelInventoryView(APIView):
 def update_allotment(request, pk):
     if request.method == 'POST':
         try:
-            allotment = HostelAllottment.objects.get(pk=pk)
-        except HostelAllottment.DoesNotExist:
-            return JsonResponse({'error': 'HostelAllottment not found'}, status=404)
+            allotment = HostelAllotment.objects.get(pk=pk)
+        except HostelAllotment.DoesNotExist:
+            return JsonResponse({'error': 'HostelAllotment not found'}, status=404)
 
         try:
             allotment.assignedWarden = Faculty.objects.get(
@@ -1683,7 +2035,7 @@ def update_allotment(request, pk):
             allotment.assignedBatch = request.POST.get(
                 'student_batch', allotment.assignedBatch)
             allotment.save()
-            return JsonResponse({'success': 'HostelAllottment updated successfully'})
+            return JsonResponse({'success': 'HostelAllotment updated successfully'})
         except (Faculty.DoesNotExist, Staff.DoesNotExist, IntegrityError):
             return JsonResponse({'error': 'Invalid data or integrity error'}, status=400)
 

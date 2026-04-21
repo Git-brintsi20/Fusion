@@ -1,0 +1,632 @@
+workflows:
+
+  - id: "HM-WF-101"
+    title: "Student Leave Request Workflow"
+    description: "Student submits leave request → Caretaker reviews → Leave Approved or Rejected. Includes attendance synchronization on approval."
+    trigger: "Student initiates HM-UC-001: Submit Leave Request"
+    actors: ["Student", "Caretaker", "System"]
+    preconditions:
+      - "Student is logged in with active hostel allotment"
+      - "Caretaker is assigned to the student's hostel"
+    end_states:
+      - "END-1: Leave Approved and Attendance Updated"
+      - "END-2: Leave Rejected"
+    referenced_brs: ["BR-HM-101", "BR-HM-102", "BR-HM-103", "BR-HM-104", "BR-HM-105"]
+
+    e2e_tests:
+      - scenario: "Student submits valid leave request; Caretaker approves; attendance updated"
+        steps:
+          - "Student submits leave with valid dates, reason, and documents (BR-HM-101, BR-HM-102, BR-HM-103)"
+          - "System validates, records request with status=Pending, notifies Caretaker"
+          - "Caretaker reviews documents and approves with remarks (BR-HM-104)"
+          - "System updates leave status to Approved"
+          - "System marks attendance as 'On Leave' for approved period (BR-HM-105)"
+          - "Student notified; can view updated leave status"
+        expected_final_state: "Leave status=Approved; attendance=On Leave for requested dates; student notified; leave visible in history"
+
+    negative_tests:
+      - scenario: "Student submits leave; Caretaker rejects"
+        steps:
+          - "Student submits leave with valid dates and reason"
+          - "Caretaker reviews and rejects with mandatory remarks"
+          - "System updates status to Rejected; student notified"
+        expected_final_state: "Leave status=Rejected; attendance unchanged; student notified with rejection reason"
+      - scenario: "Student without active allotment submits leave"
+        steps:
+          - "Student with hostel_status=Vacated submits leave request"
+          - "System checks BR-HM-101"
+        expected_final_state: "Leave submission rejected; no leave record created; eligibility error displayed"
+      - scenario: "Leave submission with end_date before start_date"
+        steps:
+          - "Student submits leave with end_date < start_date"
+          - "System validates dates per BR-HM-102"
+        expected_final_state: "Validation error; leave request not created; form data retained"
+
+  - id: "HM-WF-102"
+    title: "Complaint Resolution Workflow"
+    description: "Student submits complaint → Complaint routed by category → Investigated and resolved by Caretaker or escalated to Warden."
+    trigger: "Student initiates HM-UC-006: Submit Complaint"
+    actors: ["Student", "Caretaker", "Warden", "System"]
+    preconditions:
+      - "Student is logged in with active hostel allotment"
+      - "Caretaker and Warden are assigned to the hostel"
+    end_states:
+      - "END-1: Complaint Resolved by Caretaker"
+      - "END-2: Complaint Resolved by Warden"
+    referenced_brs: ["BR-HM-106", "BR-HM-107", "BR-HM-108", "BR-HM-109", "BR-HM-110"]
+
+    e2e_tests:
+      - scenario: "Student submits maintenance complaint; Caretaker investigates and resolves"
+        steps:
+          - "Student submits complaint with category=Maintenance, description=non-empty (BR-HM-106)"
+          - "System validates, records, routes to Caretaker (BR-HM-107.b)"
+          - "Caretaker sets status to In Progress; investigates issue"
+          - "Caretaker resolves with mandatory resolution remarks (BR-HM-108)"
+          - "System updates status to Resolved; student notified"
+        expected_final_state: "Complaint status=Resolved; resolution remarks recorded; student notified; complaint history maintained"
+      - scenario: "Student submits security complaint; Warden resolves"
+        steps:
+          - "Student submits complaint with category=Security"
+          - "System routes to Warden (BR-HM-107.a)"
+          - "Warden reviews and resolves with remarks (BR-HM-110)"
+          - "System updates status to Resolved; student notified"
+        expected_final_state: "Complaint status=Resolved by Warden; student notified"
+
+    negative_tests:
+      - scenario: "Caretaker cannot resolve; escalates to Warden"
+        steps:
+          - "Complaint status is In Progress after Caretaker investigation"
+          - "Caretaker escalates with mandatory reason (BR-HM-109)"
+          - "Complaint status updated to Escalated; Warden notified"
+          - "Warden resolves escalated complaint"
+        expected_final_state: "Complaint status=Resolved by Warden; escalation reason recorded; student notified at each stage"
+      - scenario: "Non-resident student submits complaint"
+        steps:
+          - "Student with hostel_status=Vacated submits complaint"
+          - "System checks BR-HM-106"
+        expected_final_state: "Complaint rejected; no record created"
+      - scenario: "Caretaker attempts to escalate a Resolved complaint"
+        steps:
+          - "Caretaker triggers escalation on complaint with status=Resolved"
+          - "System checks BR-HM-109"
+        expected_final_state: "Escalation blocked; complaint must be In Progress to escalate"
+
+  - id: "HM-WF-103"
+    title: "New Student Room Allotment and Onboarding Workflow"
+    description: "Bulk room allotment by Super Admin → Students notified → Hostel access enabled. Enforces capacity constraints throughout."
+    trigger: "Super Admin initiates HM-UC-011: Perform Bulk Room Allotment"
+    actors: ["Super Admin", "Student", "System"]
+    preconditions:
+      - "Hostel is active and operational"
+      - "Rooms are configured and available"
+      - "Pending accommodation requests exist"
+    end_states:
+      - "END-1: Room Allotment Completed Successfully"
+      - "END-2: Allotment Failed - Insufficient Capacity"
+      - "END-3: Allotment Blocked - Over-Allocation Risk"
+    referenced_brs: ["BR-HM-111", "BR-HM-112", "BR-HM-113", "BR-HM-114"]
+
+    e2e_tests:
+      - scenario: "Super Admin performs bulk allotment within available capacity; students notified"
+        steps:
+          - "Students submit accommodation requests during open window (BR-HM-111)"
+          - "System records requests with status=Pending"
+          - "Super Admin reviews requests and available capacity (BR-HM-113)"
+          - "System validates capacity; no over-allocation (BR-HM-112)"
+          - "Rooms assigned; occupancy updated in real time"
+          - "System notifies all students and Caretakers (BR-HM-114)"
+          - "Students view room allocation details"
+        expected_final_state: "All selected students have rooms allotted; occupancy updated; notifications sent; request statuses=Allotted"
+
+    negative_tests:
+      - scenario: "Allotment attempted beyond room capacity"
+        steps:
+          - "Super Admin selects more requests than available room capacity"
+          - "System validates occupancy per BR-HM-112"
+        expected_final_state: "Allotment blocked; over-allocation warning displayed with capacity details; occupancy unchanged"
+      - scenario: "Non-Super Admin attempts bulk allotment"
+        steps:
+          - "Caretaker initiates bulk allotment action"
+          - "System checks role per BR-HM-113"
+        expected_final_state: "Action denied with authorization error; no allotment performed"
+      - scenario: "Accommodation request submitted when window is closed"
+        steps:
+          - "Student submits request when window_status != Open"
+          - "System checks BR-HM-111"
+        expected_final_state: "Request rejected; timing error displayed to student"
+
+  - id: "HM-WF-104"
+    title: "Student Room Change Workflow"
+    description: "Student requests room change → Caretaker and Warden review availability and policy → Room reassigned if dual approval obtained."
+    trigger: "Student initiates HM-UC-013: Submit Room Change Request"
+    actors: ["Student", "Caretaker", "Warden", "System"]
+    preconditions:
+      - "Student is logged in with active room allotment"
+      - "Alternate rooms exist in the hostel"
+    end_states:
+      - "END-1: Room Change Completed Successfully"
+      - "END-2: Room Change Rejected - No Availability"
+      - "END-3: Room Change Rejected - Policy Violation"
+      - "END-4: Room Change Rejected - Approval Missing"
+    referenced_brs: ["BR-HM-115", "BR-HM-116", "BR-HM-117", "BR-HM-118"]
+
+    e2e_tests:
+      - scenario: "Student requests change; room available; both Caretaker and Warden approve; room reallocated"
+        steps:
+          - "Student submits room change request with mandatory reason (BR-HM-115)"
+          - "System validates and records with status=Pending"
+          - "Caretaker checks availability; room is available"
+          - "Warden reviews for policy compliance"
+          - "Both Caretaker and Warden approve (BR-HM-116)"
+          - "System updates room allocation; occupancy reconciled for old and new rooms (BR-HM-117)"
+          - "Student notified of new room assignment (BR-HM-118)"
+        expected_final_state: "Student assigned to new room; old room occupancy decremented; new room occupancy incremented; student notified"
+
+    negative_tests:
+      - scenario: "Room change rejected due to no available rooms"
+        steps:
+          - "Student submits room change request"
+          - "Caretaker checks availability; no suitable rooms available"
+          - "Caretaker recommends rejection"
+        expected_final_state: "Room change request rejected; student notified of unavailability"
+      - scenario: "Room change rejected due to policy violation"
+        steps:
+          - "Student submits room change request"
+          - "Warden reviews and finds policy non-compliance"
+          - "Warden rejects with policy reference in remarks"
+        expected_final_state: "Request rejected with policy violation reason; student notified; no room change"
+      - scenario: "Room change blocked due to only one approval obtained"
+        steps:
+          - "Caretaker approves but Warden has not reviewed"
+          - "System checks dual approval requirement (BR-HM-116)"
+        expected_final_state: "Reallocation blocked; request remains Pending until both approvals obtained"
+
+  - id: "HM-WF-105"
+    title: "Fine Management Workflow"
+    description: "Caretaker imposes fine → Student views fine → Warden monitors for disciplinary oversight. Includes escalation trigger for repeat offenders."
+    trigger: "Caretaker initiates HM-UC-016: Impose and Record Fine"
+    actors: ["Caretaker", "Student", "Warden", "System"]
+    preconditions:
+      - "Caretaker is logged in with fine imposition permissions"
+      - "Student is a current resident of the hostel"
+    end_states:
+      - "END-1: Fine Recorded and Tracked"
+      - "END-2: Fine Escalated for Disciplinary Review"
+    referenced_brs: ["BR-HM-012", "BR-HM-013", "BR-HM-014", "BR-HM-022"]
+
+    e2e_tests:
+      - scenario: "Caretaker imposes valid fine; student views; Warden monitors; no escalation"
+        steps:
+          - "Caretaker submits fine with valid amount, category, and reason (BR-HM-013)"
+          - "Optional evidence file validated per BR-HM-022"
+          - "System creates fine with status=Unpaid (BR-HM-014)"
+          - "Student notified of imposed fine"
+          - "Student views fine details in My Fines section (BR-HM-012.a)"
+          - "Warden monitors fine dashboard for disciplinary patterns (BR-HM-012.b)"
+          - "Fine count below threshold; no escalation"
+        expected_final_state: "Fine status=Unpaid; visible to student and Warden; no escalation triggered"
+
+    negative_tests:
+      - scenario: "Repeat offender threshold breached; escalation triggered"
+        steps:
+          - "Caretaker imposes fine on student who already has fines at threshold count"
+          - "System records fine; checks threshold per BR-HM-014.c"
+          - "Warden monitors repeat offender tab"
+          - "Student flagged for escalation review"
+        expected_final_state: "Fine recorded; student flagged for disciplinary review; Warden takes action"
+      - scenario: "Fine rejected due to invalid amount"
+        steps:
+          - "Caretaker submits fine with amount=0"
+          - "System validates per BR-HM-013.a"
+        expected_final_state: "Fine submission blocked; validation error displayed; no fine record created"
+      - scenario: "Fine rejected due to invalid evidence file"
+        steps:
+          - "Caretaker uploads evidence file exceeding 5MB"
+          - "System validates per BR-HM-022"
+        expected_final_state: "Upload rejected; fine not submitted; Caretaker prompted to correct file"
+
+  - id: "HM-WF-106"
+    title: "Hostel Setup and Staffing Workflow"
+    description: "Super Admin creates hostel → Assigns Warden and Caretaker → Activates hostel for operational use."
+    trigger: "Super Admin initiates HM-UC-019: Create Hostel"
+    actors: ["Super Admin", "System"]
+    preconditions:
+      - "Super Admin is logged in with administrative privileges"
+      - "Staff members eligible for Warden and Caretaker roles exist in the system"
+    end_states:
+      - "END-1: Hostel Active and Operational"
+      - "END-2: Hostel Created but Not Operational (inactive)"
+    referenced_brs: ["BR-HM-008", "BR-HM-019", "BR-HM-025"]
+
+    e2e_tests:
+      - scenario: "Super Admin creates hostel, assigns both staff roles, activates successfully"
+        steps:
+          - "Super Admin creates hostel with valid details (BR-HM-025)"
+          - "System registers hostel with status=Inactive; unique ID generated"
+          - "Super Admin assigns Warden to hostel"
+          - "Super Admin assigns Caretaker with shift details"
+          - "System validates all mandatory staff assigned (BR-HM-019)"
+          - "Super Admin activates hostel (BR-HM-008)"
+          - "Hostel status updated to Active"
+        expected_final_state: "Hostel status=Active; Warden and Caretaker assigned with permissions; ready for room allocation"
+
+    negative_tests:
+      - scenario: "Activation blocked because Caretaker not yet assigned"
+        steps:
+          - "Super Admin creates hostel and assigns Warden"
+          - "Super Admin attempts to activate hostel without Caretaker"
+          - "System checks BR-HM-019 and BR-HM-008"
+        expected_final_state: "Activation blocked; hostel remains Inactive; error: 'Caretaker is required before activation'"
+      - scenario: "Hostel creation fails due to duplicate name"
+        steps:
+          - "Super Admin submits hostel creation form with name that already exists"
+          - "System validates per BR-HM-025"
+        expected_final_state: "Hostel not created; validation error: 'A hostel with this name already exists'"
+      - scenario: "Deactivation blocked due to occupied rooms"
+        steps:
+          - "Super Admin attempts to deactivate active hostel with occupied rooms"
+          - "System checks BR-HM-008.a"
+        expected_final_state: "Deactivation blocked; error showing number of occupied rooms"
+
+  - id: "HM-WF-107"
+    title: "Security and Guard Shift Management Workflow"
+    description: "Warden manages guard shift schedules → System validates for conflicts and coverage → Warden reviews hostel security status."
+    trigger: "Warden logs in and initiates HM-UC-024: Manage Guard Shift Schedules"
+    actors: ["Warden", "System"]
+    preconditions:
+      - "Warden is logged in with valid permissions"
+      - "Security guards are registered and available"
+      - "Guard shift schedules and security records exist or can be created"
+    end_states:
+      - "END-1: Guard Schedules Updated and Security Status Reviewed"
+    referenced_brs: ["BR-HM-016", "BR-HM-026", "BR-HM-027"]
+
+    e2e_tests:
+      - scenario: "Warden creates valid guard schedule with full coverage; reviews security status"
+        steps:
+          - "Warden opens Guard Shift Schedule dashboard"
+          - "Warden assigns guards to all shifts for the week"
+          - "System validates: no overlapping shifts (BR-HM-016); minimum coverage met (BR-HM-026)"
+          - "Schedule saved; guards notified; audit log created (BR-HM-027)"
+          - "Warden reviews consolidated security dashboard"
+          - "Warden reviews guard deployment, coverage, and incident logs"
+        expected_final_state: "Schedule saved and active; audit trail created; Warden has complete security overview"
+
+    negative_tests:
+      - scenario: "Schedule save blocked due to coverage gap"
+        steps:
+          - "Warden assigns guards to all shifts except night shift"
+          - "System validates coverage per BR-HM-026"
+        expected_final_state: "Save blocked; night shift highlighted as coverage gap; schedule not saved"
+      - scenario: "Guard assigned overlapping shifts"
+        steps:
+          - "Warden assigns same guard to Morning and Evening shifts on the same day (violating rest policy)"
+          - "System validates per BR-HM-016"
+        expected_final_state: "Assignment rejected with conflict error; Warden revises schedule"
+      - scenario: "Critical security gaps detected during review"
+        steps:
+          - "Warden views security status; system detects understaffed shifts"
+          - "System flags gaps as high priority (BR-HM-026)"
+        expected_final_state: "High-priority alerts raised; Warden takes corrective action"
+
+  - id: "HM-WF-108"
+    title: "Inventory Management Workflow"
+    description: "Caretaker checks inventory → Identifies issues (missing/damaged/depleted) → Updates records → Raises resource request for replacement."
+    trigger: "Caretaker logs in and initiates HM-UC-026: Check Hostel Inventory and Identify Issues"
+    actors: ["Caretaker", "System"]
+    preconditions:
+      - "Caretaker is logged in with valid permissions"
+      - "Inventory records exist for the hostel"
+    end_states:
+      - "END-1: Inventory Verified with No Issues"
+      - "END-2: Inventory Issues Logged and Resource Request Raised"
+    referenced_brs: ["BR-HM-021", "BR-HM-030", "BR-HM-031"]
+
+    e2e_tests:
+      - scenario: "Caretaker finds damaged items; logs discrepancy; updates records; raises resource request"
+        steps:
+          - "Caretaker opens Inventory Management and performs physical inspection"
+          - "Caretaker marks 3 chairs as damaged (BR-HM-021)"
+          - "System saves discrepancy with item details, type, and remarks"
+          - "Caretaker updates inventory quantity and condition (BR-HM-031)"
+          - "Update logged with timestamp and user details"
+          - "Caretaker submits resource request for replacement chairs (BR-HM-030)"
+          - "Request forwarded to Warden and Super Admin for approval"
+        expected_final_state: "Inventory records updated with discrepancy log; resource request created with status=Pending; audit trail maintained"
+
+    negative_tests:
+      - scenario: "Inventory inspection finds no issues"
+        steps:
+          - "Caretaker inspects all items; all match expected quantities and conditions"
+        expected_final_state: "Inspection recorded as complete; no discrepancy logs created; workflow ends at END-1"
+      - scenario: "Resource request rejected due to missing justification"
+        steps:
+          - "Caretaker submits resource request without justification"
+          - "System validates per BR-HM-030"
+        expected_final_state: "Request submission blocked; validation error displayed; no approval workflow initiated"
+      - scenario: "Inventory update with negative quantity"
+        steps:
+          - "Caretaker enters quantity=-2 during inventory update"
+          - "System validates per BR-HM-031"
+        expected_final_state: "Update rejected with validation error; inventory records unchanged"
+
+  - id: "HM-WF-109"
+    title: "Student Room Vacation and Clearance Workflow"
+    description: "Student requests room vacation → Caretaker verifies clearance requirements → Super Admin finalizes vacation with room deallocation and history archival."
+    trigger: "Student initiates HM-UC-029: Request Room Vacation"
+    actors: ["Student", "Caretaker", "Super Admin", "System"]
+    preconditions:
+      - "Student is logged in with active hostel accommodation"
+      - "Student has not already submitted a pending vacation request"
+      - "Caretaker and Super Admin have appropriate permissions"
+    end_states:
+      - "END-1: Room Vacation Completed Successfully"
+      - "END-2: Vacation Request Rejected - Clearance Not Met"
+      - "END-3: Vacation Request Cancelled by Student"
+    referenced_brs: ["BR-HM-015", "BR-HM-023", "BR-HM-028"]
+
+    e2e_tests:
+      - scenario: "Student with all clearances satisfied completes room vacation"
+        steps:
+          - "Student submits vacation request with valid date and reason"
+          - "System generates clearance checklist (BR-HM-015.c)"
+          - "Student acknowledges checklist; request recorded with status=Pending Clearance"
+          - "Caretaker receives notification; conducts room inspection"
+          - "Caretaker verifies: no fines, no unreturned items, no damages, attendance OK (BR-HM-015.b)"
+          - "All clearance items satisfied; Caretaker issues clearance certificate"
+          - "Vacation request status updated to Clearance Approved"
+          - "Super Admin receives notification; reviews clearance details"
+          - "Super Admin finalizes vacation (BR-HM-028)"
+          - "System deallocates room; updates status to Available (BR-HM-023)"
+          - "Complete hostel history archived; vacation request status=Completed"
+          - "Final confirmation sent to student"
+        expected_final_state: "Room deallocated; room status=Available; student hostel history archived; vacation request=Completed; student notified"
+
+    negative_tests:
+      - scenario: "Clearance blocked due to outstanding fines; student resolves and re-initiates"
+        steps:
+          - "Student submits vacation request; checklist shows outstanding fines"
+          - "Caretaker verifies; fines still outstanding; status=Clearance Pending - Action Required"
+          - "Student pays fines; Caretaker re-verifies"
+          - "Clearance approved after resolution"
+        expected_final_state: "Clearance approved after student resolves issues; flow continues to finalization"
+      - scenario: "Student cancels vacation request voluntarily"
+        steps:
+          - "Student reviews clearance checklist"
+          - "Student decides to cancel the vacation request"
+        expected_final_state: "Vacation request cancelled; student retains current room allocation; no archival or deallocation performed"
+      - scenario: "Finalization attempted without clearance approval"
+        steps:
+          - "Super Admin attempts to finalize vacation with clearance status=Pending"
+          - "System checks BR-HM-028"
+        expected_final_state: "Finalization blocked: 'Prerequisites not satisfied'; vacation request unchanged"
+
+  - id: "HM-WF-110"
+    title: "Staff Notice Management Workflow"
+    description: "Staff creates and publishes notice → System notifies students → Students view and mark as read → System auto-archives expired notices."
+    trigger: "Caretaker/Warden initiates HM-UC-032: Create and Publish Notice"
+    actors: ["Caretaker", "Warden", "Student", "System"]
+    preconditions:
+      - "Caretaker/Warden is logged in with notice publication permissions"
+      - "Staff is assigned to at least one hostel"
+      - "Students have active hostel accommodation"
+    end_states:
+      - "END-1: Notice Published and Active"
+      - "END-2: Notice Archived After Expiry"
+      - "END-3: Notice Deleted by Staff"
+    referenced_brs: ["BR-HM-029", "BR-HM-033", "BR-HM-035", "BR-HM-039"]
+
+    e2e_tests:
+      - scenario: "Staff publishes Urgent notice; students notified immediately; notice archived after expiry"
+        steps:
+          - "Staff creates notice with title, description, audience, priority=Urgent"
+          - "System validates content per BR-HM-029"
+          - "System publishes notice; sends immediate push notifications to targeted students (BR-HM-033.b)"
+          - "Students see notice with red banner at top of notice board (BR-HM-035.a)"
+          - "Students open notice; system marks as read"
+          - "After end_date, system auto-archives notice (BR-HM-035.e)"
+          - "Notice accessible in Notice History for reference"
+        expected_final_state: "Notice published and visible; read status tracked per student; expired notice archived; accessible in history"
+
+    negative_tests:
+      - scenario: "Notice publication blocked due to short title"
+        steps:
+          - "Staff submits notice with title='Hi' (2 chars)"
+          - "System validates per BR-HM-029.a"
+        expected_final_state: "Publication blocked; validation error: title must be 5-200 characters"
+      - scenario: "Student from another hostel cannot see notice"
+        steps:
+          - "Notice published targeting Hostel A only"
+          - "Student from Hostel B accesses notice board"
+          - "System filters per BR-HM-035.c and BR-HM-039.a"
+        expected_final_state: "Hostel B student does not see Hostel A notice; only own hostel and All Students notices visible"
+      - scenario: "Staff edits and republishes a notice"
+        steps:
+          - "Staff selects published notice and edits description"
+          - "System republishes updated content"
+          - "Update notification sent to targeted students"
+        expected_final_state: "Notice updated with new content; students notified of update; previous version overwritten"
+      - scenario: "Staff deletes a published notice"
+        steps:
+          - "Staff selects notice and clicks Delete with confirmation"
+          - "System removes notice from board"
+          - "Removal notification sent to affected students"
+        expected_final_state: "Notice removed from active board and system; students notified of removal"
+
+  - id: "HM-WF-111"
+    title: "Staff Report Generation Workflow"
+    description: "Warden/Caretaker generates hostel report → Warden submits to Super Admin → Super Admin reviews, provides feedback, and downloads."
+    trigger: "Warden/Caretaker initiates HM-UC-034: Create Reports"
+    actors: ["Warden", "Caretaker", "Super Admin", "System"]
+    preconditions:
+      - "Warden/Caretaker is logged in with report generation permissions"
+      - "Sufficient data exists in system for report generation"
+      - "User is assigned to at least one hostel"
+    end_states:
+      - "END-1: Report Reviewed and Archived"
+      - "END-2: Report Requires Revision"
+      - "END-3: Report Exported for Records"
+    referenced_brs: ["BR-HM-040", "BR-HM-043", "BR-HM-044", "BR-HM-045", "BR-HM-046", "BR-HM-050"]
+
+    e2e_tests:
+      - scenario: "Warden generates report, reviews, submits to Super Admin who approves and downloads"
+        steps:
+          - "Warden selects report type, date range, and filters (BR-HM-040, BR-HM-043)"
+          - "System validates parameters and generates report with statistics and charts (BR-HM-044)"
+          - "Warden reviews report for accuracy"
+          - "Warden submits report to Super Admin with notes (BR-HM-045)"
+          - "System records submission with timestamp; Super Admin notified"
+          - "Super Admin reviews complete report content (BR-HM-046)"
+          - "Super Admin approves and downloads as PDF (BR-HM-050)"
+          - "Download logged in audit trail; report archived"
+        expected_final_state: "Report submitted, reviewed, and approved; downloaded by Super Admin; audit trail maintained with creator, submitter, reviewer, and download timestamp"
+
+    negative_tests:
+      - scenario: "Super Admin requests clarification; Warden revises and resubmits"
+        steps:
+          - "Super Admin reviews report; finds incomplete data"
+          - "Super Admin requests clarification with comments (BR-HM-046.b)"
+          - "Report returned to Warden"
+          - "Warden adds additional details and resubmits"
+          - "Super Admin re-reviews"
+        expected_final_state: "Report revised and resubmitted; clarification cycle complete; report eventually approved or rejected"
+      - scenario: "Caretaker attempts to submit report directly to Super Admin"
+        steps:
+          - "Caretaker generates report"
+          - "Caretaker attempts to submit directly to Super Admin"
+          - "System checks BR-HM-045.b"
+        expected_final_state: "Submission denied: Caretakers must submit to their Warden"
+      - scenario: "Report generation fails due to invalid date range"
+        steps:
+          - "Staff selects end_date before start_date in report parameters"
+          - "System validates per BR-HM-043"
+        expected_final_state: "Validation error; problematic fields highlighted; report not generated"
+
+  - id: "HM-WF-112"
+    title: "Student Guest Room Booking Workflow"
+    description: "Student requests guest room → Caretaker reviews and approves/rejects → Caretaker manages check-in and check-out including room inspection."
+    trigger: "Student initiates HM-UC-036: Request Guest Room"
+    actors: ["Student", "Caretaker", "System"]
+    preconditions:
+      - "Student is logged in with active hostel accommodation"
+      - "Guest room booking feature is enabled; at least one guest room exists"
+      - "Caretaker has appropriate permissions"
+    end_states:
+      - "END-1: Booking Completed Successfully"
+      - "END-2: Booking Rejected"
+      - "END-3: Booking Cancelled by Student"
+      - "END-4: Booking Completed with Damage Charges"
+    referenced_brs: ["BR-HM-051", "BR-HM-052", "BR-HM-053", "BR-HM-054", "BR-HM-055", "BR-HM-056", "BR-HM-057", "BR-HM-058", "BR-HM-059"]
+
+    e2e_tests:
+      - scenario: "Student books guest room; Caretaker approves; guest checks in and out without damages"
+        steps:
+          - "Student submits booking with valid guest details, dates, and purpose (BR-HM-052, BR-HM-053, BR-HM-054)"
+          - "System validates eligibility (BR-HM-051) and room availability"
+          - "Booking recorded with status=Pending; Caretaker notified"
+          - "Caretaker verifies student eligibility and room availability (BR-HM-051)"
+          - "Charge breakdown calculated and confirmed (BR-HM-059)"
+          - "Caretaker approves; room reserved; student notified with booking confirmation"
+          - "On check-in date: Caretaker verifies guest identity per BR-HM-056"
+          - "Guest checked in; room key issued; status=Checked-In"
+          - "On check-out date: Caretaker conducts room inspection per BR-HM-057"
+          - "No damages found; check-out completed"
+          - "Booking status=Completed; room status=Available"
+        expected_final_state: "Booking completed successfully; room released and marked Available; no fines imposed; complete booking record maintained"
+
+    negative_tests:
+      - scenario: "Student cancels booking before check-in"
+        steps:
+          - "Booking status is Approved; check-in has not occurred"
+          - "Student cancels booking with confirmation"
+          - "Room reservation released; Caretaker notified"
+        expected_final_state: "Booking status=Cancelled; room released; no charges applied"
+      - scenario: "Booking rejected due to student having 3 active bookings"
+        steps:
+          - "Student submits new booking when they already have 3 active bookings"
+          - "System checks BR-HM-051.d"
+        expected_final_state: "Booking rejected: maximum concurrent bookings limit reached"
+      - scenario: "Guest damages found at check-out; fine imposed"
+        steps:
+          - "Caretaker inspects room at check-out; finds damaged furniture"
+          - "Damage categorized and repair cost estimated per BR-HM-058"
+          - "Fine created and linked to booking and student account"
+          - "Student notified; 48-hour contest window provided"
+        expected_final_state: "Booking status=Completed with Damages; fine imposed with status=Unpaid; room marked Available; student notified"
+      - scenario: "Booking rejected by Caretaker due to student ineligibility"
+        steps:
+          - "Caretaker reviews request; student has outstanding fines exceeding grace amount"
+          - "Caretaker rejects with reason"
+        expected_final_state: "Booking status=Rejected; student notified with rejection reason; room remains available"
+
+  - id: "HM-WF-113"
+    title: "Extended Stay During Vacations Management Workflow"
+    description: "Student applies for extended stay → Caretaker/Warden approves → System manages room reservation, charges, services, presence monitoring, and violations."
+    trigger: "Student initiates HM-UC-038: Apply for Extended Stay"
+    actors: ["Student", "Caretaker", "Warden", "System"]
+    preconditions:
+      - "Student is logged in with active hostel accommodation"
+      - "Institute vacation period is declared in system"
+      - "Student has obtained faculty authorization"
+      - "Caretaker/Warden has appropriate permissions"
+    end_states:
+      - "END-1: Extended Stay Completed Successfully"
+      - "END-2: Application Rejected"
+      - "END-3: Application Cancelled by Student"
+      - "END-4: Stay Terminated Due to Violations"
+    referenced_brs: ["BR-HM-061", "BR-HM-062", "BR-HM-063", "BR-HM-064", "BR-HM-065", "BR-HM-066", "BR-HM-067", "BR-HM-073", "BR-HM-074"]
+
+    e2e_tests:
+      - scenario: "Student applies with valid authorization; approved; pays charges; completes stay without violations"
+        steps:
+          - "Student submits extended stay application with dates within vacation period (BR-HM-062)"
+          - "Student uploads valid faculty authorization in correct format (BR-HM-063)"
+          - "System calculates and displays charge breakdown (BR-HM-064)"
+          - "Student acknowledges charges and submits"
+          - "System validates eligibility (BR-HM-061) and records application as Pending"
+          - "Caretaker/Warden reviews application; verifies authorization authenticity (BR-HM-066)"
+          - "Room availability confirmed for vacation period (BR-HM-067)"
+          - "Application approved; student notified with stay details"
+          - "System reserves room; charge notification sent (BR-HM-073)"
+          - "Student pays within deadline"
+          - "System coordinates mess, cleaning, and security services (BR-HM-074)"
+          - "During stay: presence monitored; no violations detected"
+          - "Stay period ends; system updates occupancy; completion report generated"
+        expected_final_state: "Extended stay completed; charges paid; room released; stay record archived; no violations; comprehensive report generated"
+
+    negative_tests:
+      - scenario: "Application rejected due to invalid faculty authorization"
+        steps:
+          - "Caretaker/Warden reviews authorization; signature does not match faculty records"
+          - "Authorization flagged as suspicious (BR-HM-066.d)"
+          - "Direct verification initiated with faculty; confirmed as forged"
+          - "Application rejected; disciplinary action initiated"
+        expected_final_state: "Application status=Rejected; disciplinary action initiated; student notified with rejection reason"
+      - scenario: "Approval revoked due to non-payment by deadline"
+        steps:
+          - "Application approved; charge notification sent"
+          - "Payment deadline reached (BR-HM-073.a) with payment_status=Unpaid"
+          - "System sends 24-hour final warning (BR-HM-073.c)"
+          - "Stay start date arrives; payment still not received"
+          - "System automatically revokes approval (BR-HM-073.d)"
+          - "Room reservation released"
+        expected_final_state: "Approval revoked; room reservation cancelled; student notified; application status=Cancelled"
+      - scenario: "Stay terminated due to major violation"
+        steps:
+          - "During vacation, security reports unauthorized guest in student room"
+          - "Caretaker documents violation as Major"
+          - "Fine imposed; violation recorded against extended stay"
+          - "Stay terminated; student asked to vacate immediately"
+        expected_final_state: "Stay terminated; fine imposed; violation logged; room released; future extended stay eligibility affected for 1 year"
+      - scenario: "Capacity limit reached; application placed on waitlist"
+        steps:
+          - "30% of hostel capacity already allocated for extended stays (BR-HM-067.b)"
+          - "New application submitted"
+          - "System detects capacity threshold reached"
+        expected_final_state: "Application moved to waitlist; student notified: 'Capacity reached'; remains pending until capacity becomes available"
+      - scenario: "Student cancels application before approval"
+        steps:
+          - "Student submits application; receives confirmation"
+          - "Student decides to cancel before Caretaker/Warden reviews"
+          - "Student confirms cancellation"
+        expected_final_state: "Application status=Cancelled; no room reserved; staff notified of cancellation"

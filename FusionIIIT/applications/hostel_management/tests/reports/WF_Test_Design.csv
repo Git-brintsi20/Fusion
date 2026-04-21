@@ -1,0 +1,58 @@
+WF_ID,Title,Category,Scenario,Expected Final State
+HM-WF-101,Student Leave Request Workflow,End-to-End,Student submits valid leave request; Caretaker approves; attendance updated,Leave status=Approved; attendance=On Leave for requested dates; student notified; leave visible in history
+HM-WF-101,Student Leave Request Workflow,Negative,Student submits leave; Caretaker rejects,Leave status=Rejected; attendance unchanged; student notified with rejection reason
+HM-WF-101,Student Leave Request Workflow,Negative,Student without active allotment submits leave,Leave submission rejected; no leave record created; eligibility error displayed
+HM-WF-101,Student Leave Request Workflow,Negative,Leave submission with end_date before start_date,Validation error; leave request not created; form data retained
+HM-WF-102,Complaint Resolution Workflow,End-to-End,Student submits maintenance complaint; Caretaker investigates and resolves,Complaint status=Resolved; resolution remarks recorded; student notified; complaint history maintained
+HM-WF-102,Complaint Resolution Workflow,End-to-End,Student submits security complaint; Warden resolves,Complaint status=Resolved by Warden; student notified
+HM-WF-102,Complaint Resolution Workflow,Negative,Caretaker cannot resolve; escalates to Warden,Complaint status=Resolved by Warden; escalation reason recorded; student notified at each stage
+HM-WF-102,Complaint Resolution Workflow,Negative,Non-resident student submits complaint,Complaint rejected; no record created
+HM-WF-102,Complaint Resolution Workflow,Negative,Caretaker attempts to escalate a Resolved complaint,Escalation blocked; complaint must be In Progress to escalate
+HM-WF-103,New Student Room Allotment and Onboarding Workflow,End-to-End,Super Admin performs bulk allotment within available capacity; students notified,All selected students have rooms allotted; occupancy updated; notifications sent; request statuses=Allotted
+HM-WF-103,New Student Room Allotment and Onboarding Workflow,Negative,Allotment attempted beyond room capacity,Allotment blocked; over-allocation warning displayed with capacity details; occupancy unchanged
+HM-WF-103,New Student Room Allotment and Onboarding Workflow,Negative,Non-Super Admin attempts bulk allotment,Action denied with authorization error; no allotment performed
+HM-WF-103,New Student Room Allotment and Onboarding Workflow,Negative,Accommodation request submitted when window is closed,Request rejected; timing error displayed to student
+HM-WF-104,Student Room Change Workflow,End-to-End,Student requests change; room available; both Caretaker and Warden approve; room reallocated,Student assigned to new room; old room occupancy decremented; new room occupancy incremented; student notified
+HM-WF-104,Student Room Change Workflow,Negative,Room change rejected due to no available rooms,Room change request rejected; student notified of unavailability
+HM-WF-104,Student Room Change Workflow,Negative,Room change rejected due to policy violation,Request rejected with policy violation reason; student notified; no room change
+HM-WF-104,Student Room Change Workflow,Negative,Room change blocked due to only one approval obtained,Reallocation blocked; request remains Pending until both approvals obtained
+HM-WF-105,Fine Management Workflow,End-to-End,Caretaker imposes valid fine; student views; Warden monitors; no escalation,Fine status=Unpaid; visible to student and Warden; no escalation triggered
+HM-WF-105,Fine Management Workflow,Negative,Repeat offender threshold breached; escalation triggered,Fine recorded; student flagged for disciplinary review; Warden takes action
+HM-WF-105,Fine Management Workflow,Negative,Fine rejected due to invalid amount,Fine submission blocked; validation error displayed; no fine record created
+HM-WF-105,Fine Management Workflow,Negative,Fine rejected due to invalid evidence file,Upload rejected; fine not submitted; Caretaker prompted to correct file
+HM-WF-106,Hostel Setup and Staffing Workflow,End-to-End,"Super Admin creates hostel, assigns both staff roles, activates successfully",Hostel status=Active; Warden and Caretaker assigned with permissions; ready for room allocation
+HM-WF-106,Hostel Setup and Staffing Workflow,Negative,Activation blocked because Caretaker not yet assigned,Activation blocked; hostel remains Inactive; error: 'Caretaker is required before activation'
+HM-WF-106,Hostel Setup and Staffing Workflow,Negative,Hostel creation fails due to duplicate name,Hostel not created; validation error: 'A hostel with this name already exists'
+HM-WF-106,Hostel Setup and Staffing Workflow,Negative,Deactivation blocked due to occupied rooms,Deactivation blocked; error showing number of occupied rooms
+HM-WF-107,Security and Guard Shift Management Workflow,End-to-End,Warden creates valid guard schedule with full coverage; reviews security status,Schedule saved and active; audit trail created; Warden has complete security overview
+HM-WF-107,Security and Guard Shift Management Workflow,Negative,Schedule save blocked due to coverage gap,Save blocked; night shift highlighted as coverage gap; schedule not saved
+HM-WF-107,Security and Guard Shift Management Workflow,Negative,Guard assigned overlapping shifts,Assignment rejected with conflict error; Warden revises schedule
+HM-WF-107,Security and Guard Shift Management Workflow,Negative,Critical security gaps detected during review,High-priority alerts raised; Warden takes corrective action
+HM-WF-108,Inventory Management Workflow,End-to-End,Caretaker finds damaged items; logs discrepancy; updates records; raises resource request,Inventory records updated with discrepancy log; resource request created with status=Pending; audit trail maintained
+HM-WF-108,Inventory Management Workflow,Negative,Inventory inspection finds no issues,Inspection recorded as complete; no discrepancy logs created; workflow ends at END-1
+HM-WF-108,Inventory Management Workflow,Negative,Resource request rejected due to missing justification,Request submission blocked; validation error displayed; no approval workflow initiated
+HM-WF-108,Inventory Management Workflow,Negative,Inventory update with negative quantity,Update rejected with validation error; inventory records unchanged
+HM-WF-109,Student Room Vacation and Clearance Workflow,End-to-End,Student with all clearances satisfied completes room vacation,Room deallocated; room status=Available; student hostel history archived; vacation request=Completed; student notified
+HM-WF-109,Student Room Vacation and Clearance Workflow,Negative,Clearance blocked due to outstanding fines; student resolves and re-initiates,Clearance approved after student resolves issues; flow continues to finalization
+HM-WF-109,Student Room Vacation and Clearance Workflow,Negative,Student cancels vacation request voluntarily,Vacation request cancelled; student retains current room allocation; no archival or deallocation performed
+HM-WF-109,Student Room Vacation and Clearance Workflow,Negative,Finalization attempted without clearance approval,Finalization blocked: 'Prerequisites not satisfied'; vacation request unchanged
+HM-WF-110,Staff Notice Management Workflow,End-to-End,Staff publishes Urgent notice; students notified immediately; notice archived after expiry,Notice published and visible; read status tracked per student; expired notice archived; accessible in history
+HM-WF-110,Staff Notice Management Workflow,Negative,Notice publication blocked due to short title,Publication blocked; validation error: title must be 5-200 characters
+HM-WF-110,Staff Notice Management Workflow,Negative,Student from another hostel cannot see notice,Hostel B student does not see Hostel A notice; only own hostel and All Students notices visible
+HM-WF-110,Staff Notice Management Workflow,Negative,Staff edits and republishes a notice,Notice updated with new content; students notified of update; previous version overwritten
+HM-WF-110,Staff Notice Management Workflow,Negative,Staff deletes a published notice,Notice removed from active board and system; students notified of removal
+HM-WF-111,Staff Report Generation Workflow,End-to-End,"Warden generates report, reviews, submits to Super Admin who approves and downloads","Report submitted, reviewed, and approved; downloaded by Super Admin; audit trail maintained with creator, submitter, reviewer, and download timestamp"
+HM-WF-111,Staff Report Generation Workflow,Negative,Super Admin requests clarification; Warden revises and resubmits,Report revised and resubmitted; clarification cycle complete; report eventually approved or rejected
+HM-WF-111,Staff Report Generation Workflow,Negative,Caretaker attempts to submit report directly to Super Admin,Submission denied: Caretakers must submit to their Warden
+HM-WF-111,Staff Report Generation Workflow,Negative,Report generation fails due to invalid date range,Validation error; problematic fields highlighted; report not generated
+HM-WF-112,Student Guest Room Booking Workflow,End-to-End,Student books guest room; Caretaker approves; guest checks in and out without damages,Booking completed successfully; room released and marked Available; no fines imposed; complete booking record maintained
+HM-WF-112,Student Guest Room Booking Workflow,Negative,Student cancels booking before check-in,Booking status=Cancelled; room released; no charges applied
+HM-WF-112,Student Guest Room Booking Workflow,Negative,Booking rejected due to student having 3 active bookings,Booking rejected: maximum concurrent bookings limit reached
+HM-WF-112,Student Guest Room Booking Workflow,Negative,Guest damages found at check-out; fine imposed,Booking status=Completed with Damages; fine imposed with status=Unpaid; room marked Available; student notified
+HM-WF-112,Student Guest Room Booking Workflow,Negative,Booking rejected by Caretaker due to student ineligibility,Booking status=Rejected; student notified with rejection reason; room remains available
+HM-WF-113,Extended Stay During Vacations Management Workflow,End-to-End,Student applies with valid authorization; approved; pays charges; completes stay without violations,Extended stay completed; charges paid; room released; stay record archived; no violations; comprehensive report generated
+HM-WF-113,Extended Stay During Vacations Management Workflow,Negative,Application rejected due to invalid faculty authorization,Application status=Rejected; disciplinary action initiated; student notified with rejection reason
+HM-WF-113,Extended Stay During Vacations Management Workflow,Negative,Approval revoked due to non-payment by deadline,Approval revoked; room reservation cancelled; student notified; application status=Cancelled
+HM-WF-113,Extended Stay During Vacations Management Workflow,Negative,Stay terminated due to major violation,Stay terminated; fine imposed; violation logged; room released; future extended stay eligibility affected for 1 year
+HM-WF-113,Extended Stay During Vacations Management Workflow,Negative,Capacity limit reached; application placed on waitlist,Application moved to waitlist; student notified: 'Capacity reached'; remains pending until capacity becomes available
+HM-WF-113,Extended Stay During Vacations Management Workflow,Negative,Student cancels application before approval,Application status=Cancelled; no room reserved; staff notified of cancellation
