@@ -15,6 +15,7 @@ from rest_framework.decorators import api_view, permission_classes,authenticatio
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.http import JsonResponse
+from applications.hostel_management.models import HallCaretaker, HallWarden
 
 
 from . import serializers
@@ -78,6 +79,19 @@ def auth_view(request):
     for id in designation_id :
         name_ = get_object_or_404(Designation, id = id)
         designation_info.append(str(name_.name))
+
+    # Add hostel-specific functional roles from assignment tables.
+    # Many caretaker/warden users do not carry explicit HoldsDesignation entries,
+    # but frontend module routing depends on these role names.
+    user_extrainfo_id = getattr(getattr(request.user, "extrainfo", None), "id", None)
+    if user_extrainfo_id:
+        if HallCaretaker.objects.filter(staff_id=user_extrainfo_id).exists():
+            designation_info.insert(0, "caretaker")
+        if HallWarden.objects.filter(faculty_id=user_extrainfo_id).exists():
+            designation_info.insert(0, "warden")
+
+    # Preserve order while removing duplicates.
+    designation_info = list(dict.fromkeys(designation_info))
 
     accessible_modules = {}
     

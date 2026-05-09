@@ -1,0 +1,342 @@
+Defect ID,Related Test ID,Related Artifact,Severity,Description,Suggested Fix
+D-001,BR-HM-015-I-01,BR-HM-015,High,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-002,BR-HM-015-I-02,BR-HM-015,High,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-003,BR-HM-015-V-01,BR-HM-015,High,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-004,BR-HM-016-I-01,BR-HM-016,Medium,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-005,BR-HM-016-V-01,BR-HM-016,Medium,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-006,BR-HM-045-V-01,BR-HM-045,Medium,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-007,BR-HM-104-I-01,BR-HM-104,Medium,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-008,BR-HM-104-V-01,BR-HM-104,Medium,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-009,BR-HM-105-I-01,BR-HM-105,High,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-010,BR-HM-105-V-01,BR-HM-105,High,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-011,BR-HM-116-V-01,BR-HM-116,Medium,"Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-012,UC-003-AP-01,HM-UC-003,Medium,"No leave requests found for student | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-013,UC-004-AP-01,HM-UC-004,High,"Leave rejected; attendance remains unchanged | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-014,UC-004-HP-01,HM-UC-004,High,"Leave approved; attendance marked On Leave for approved period | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-015,UC-019-EX-01,HM-UC-019,High,"Hostel with duplicate name submitted | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-016,UC-019-EX-02,HM-UC-019,High,"Hostel created with capacity=0 | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-017,UC-019-HP-01,HM-UC-019,High,"Super Admin creates hostel with all required details | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-018,UC-020-EX-01,HM-UC-020,High,"Activation attempted without Caretaker assignment | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-019,UC-020-EX-02,HM-UC-020,High,"Super Admin attempts to deactivate hostel with occupied rooms | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-020,UC-020-HP-01,HM-UC-020,High,"Super Admin activates fully staffed hostel | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-021,UC-021-EX-01,HM-UC-021,High,"Warden assignment with end_date before start_date | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-022,UC-021-HP-01,HM-UC-021,High,"Super Admin assigns Warden with start date | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-023,UC-022-HP-01,HM-UC-022,High,"Super Admin assigns Caretaker with shift details | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-024,UC-024-EX-01,HM-UC-024,High,"Night shift has no guard assigned | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-025,UC-024-HP-01,HM-UC-024,High,"Warden creates weekly schedule with full coverage | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-026,UC-026-HP-01,HM-UC-026,High,"Caretaker inspects inventory and marks discrepancies | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-027,UC-027-EX-01,HM-UC-027,High,"Resource request with empty justification | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-028,UC-027-HP-01,HM-UC-027,High,"Caretaker submits replacement request for damaged items | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-029,UC-029-HP-01,HM-UC-029,High,"Student with clear record submits vacation request | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-030,UC-030-EX-01,HM-UC-030,Medium,"Student with outstanding fines attempts clearance | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-031,UC-030-HP-01,HM-UC-030,Medium,"Caretaker approves clearance; certificate issued | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-032,UC-031-EX-01,HM-UC-031,Medium,"Finalization attempted when clearance status is Pending | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-033,UC-031-HP-01,HM-UC-031,Medium,"Super Admin finalizes clearance-approved vacation | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-034,UC-033-HP-02,HM-UC-033,High,"Student opens notice; system marks as Read | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-035,UC-035-HP-01,HM-UC-035,Medium,"Warden submits Generated report to Super Admin with notes | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-036,UC-038-EX-01,HM-UC-038,High,"Extended stay dates extend beyond vacation period | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-037,UC-038-EX-02,HM-UC-038,High,"Extended stay submitted without faculty authorization | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-038,UC-038-HP-01,HM-UC-038,High,"Student submits extended stay with valid authorization | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-039,UC-039-EX-01,HM-UC-039,Medium,"Reviewer flags authorization as potentially forged | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-040,UC-039-HP-01,HM-UC-039,Medium,"Caretaker approves application after verifying authorization | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-041,UC-040-EX-01,HM-UC-040,Medium,"Stay start date reached without payment; approval revoked | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-042,UC-040-HP-01,HM-UC-040,Medium,"Room reserved and charges calculated after approval | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-043,HM-WF-101-E2E-01,HM-WF-101,Medium,"Student submits valid leave → Caretaker approves → attendance updated to 'On Leave' | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-044,HM-WF-101-NEG-01,HM-WF-101,Medium,"Student submits leave; Caretaker rejects with mandatory remarks | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-045,HM-WF-102-E2E-01,HM-WF-102,Medium,"Student submits Maintenance complaint; Caretaker investigates and resolves | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-046,HM-WF-102-E2E-02,HM-WF-102,Medium,"Student submits Security complaint; Warden resolves | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-047,HM-WF-102-NEG-01,HM-WF-102,Medium,"Caretaker cannot resolve; escalates to Warden | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-048,HM-WF-102-NEG-03,HM-WF-102,High,"Caretaker attempts to escalate an already-Resolved complaint | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-049,HM-WF-103-E2E-01,HM-WF-103,High,"Super Admin performs bulk allotment within capacity; students notified | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-050,HM-WF-103-NEG-01,HM-WF-103,High,"Allotment attempted beyond room capacity | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-051,HM-WF-104-E2E-01,HM-WF-104,High,"Student requests; room available; both approve; room reallocated | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-052,HM-WF-104-NEG-03,HM-WF-104,High,"Caretaker approves; Warden has not reviewed; reallocation blocked | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-053,HM-WF-105-E2E-01,HM-WF-105,High,"Caretaker imposes fine; student views; Warden monitors; no escalation | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-054,HM-WF-105-NEG-03,HM-WF-105,High,"Fine rejected due to evidence file > 5 MB | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-055,HM-WF-105-NEG-02,HM-WF-105,High,"Fine rejected due to invalid amount (amount=0) | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-056,HM-WF-106-E2E-01,HM-WF-106,Medium,"Super Admin creates hostel, assigns both staff roles, activates | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-057,HM-WF-106-NEG-01,HM-WF-106,High,"Activation blocked because Caretaker not yet assigned | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-058,HM-WF-106-NEG-02,HM-WF-106,Medium,"Hostel creation fails due to duplicate name | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-059,HM-WF-107-E2E-01,HM-WF-107,Medium,"Warden creates valid full-coverage schedule; reviews security status | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-060,HM-WF-107-NEG-01,HM-WF-107,Medium,"Schedule save blocked due to night-shift coverage gap | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-061,HM-WF-107-NEG-02,HM-WF-107,Medium,"Same guard assigned to Morning and Evening on the same day | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-062,HM-WF-108-E2E-01,HM-WF-108,Medium,"Caretaker finds damaged items; logs discrepancy; raises resource request | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-063,HM-WF-108-NEG-03,HM-WF-108,Medium,"Inventory update with negative quantity | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-064,HM-WF-108-NEG-02,HM-WF-108,Medium,"Resource request rejected due to missing justification | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-065,HM-WF-109-E2E-01,HM-WF-109,Medium,"Student with all clearances satisfied completes room vacation | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-066,HM-WF-109-NEG-03,HM-WF-109,High,"Finalization attempted without clearance approval | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-067,HM-WF-110-E2E-01,HM-WF-110,High,"Staff publishes Urgent notice; students notified; auto-archived after expiry | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-068,HM-WF-110-NEG-02,HM-WF-110,High,"Student from Hostel-B cannot see Hostel-A notice | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-069,HM-WF-111-E2E-01,HM-WF-111,Medium,"Warden generates report, submits; Super Admin approves and downloads | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-070,HM-WF-111-NEG-02,HM-WF-111,High,"Caretaker attempts to submit report directly to Super Admin | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-071,HM-WF-112-E2E-01,HM-WF-112,Medium,"Student books guest room; approved; check-in and check-out without damages | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-072,HM-WF-112-NEG-02,HM-WF-112,High,"Student submits new booking when already at 3 active bookings | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-073,HM-WF-112-NEG-03,HM-WF-112,High,"Guest damages found at check-out; fine imposed | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-074,HM-WF-113-E2E-01,HM-WF-113,Medium,"Student applies with valid auth; approved; pays charges; completes stay | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-075,HM-WF-113-NEG-02,HM-WF-113,High,"Approval revoked because payment not received by deadline | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-076,HM-WF-113-NEG-04,HM-WF-113,Medium,"Capacity limit (30%) reached; new application placed on waitlist | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."
+D-077,HM-WF-113-NEG-03,HM-WF-113,High,"Stay terminated due to major violation (unauthorized guest) | Traceback (most recent call last):
+  File ""C:\Users\kolli\AppData\Local\Programs\Python\Python38\lib\unittest\case.py"", line 60, in testPartExecutor
+    yield
+  File ""C:\Users\kolli\AppData\Local\Prog","Review failing test, update mock responses or business logic to meet expected behavior."

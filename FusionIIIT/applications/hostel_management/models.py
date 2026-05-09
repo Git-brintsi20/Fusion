@@ -36,6 +36,18 @@ class HostelManagementConstants:
         ("Forward", "Forward"),
     )
 
+    TYPE_OF_SEATER = (
+        ('single', 'Single Seater'),
+        ('double', 'Double Seater'),
+        ('triple', 'Triple Seater'),
+    )
+
+    ROOM_TYPES = (
+        ('single', 'Single'),
+        ('double', 'Double'),
+        ('triple', 'Triple'),
+    )
+
 
 class Hall(models.Model):
     """
@@ -333,15 +345,48 @@ class HostelLeave(models.Model):
         return f"{self.student_name}'s Leave"
 
 
+
+class LeaveRequest(models.Model):
+    """Unmanaged model mapping the existing `leave_requests` DB table.
+
+    NOTE: Do NOT create migrations for this model.
+    """
+
+    id = models.AutoField(primary_key=True)
+    student_name = models.CharField(max_length=255)
+    roll_num = models.CharField(max_length=255)
+    reason = models.TextField()
+    phone_number = models.CharField(max_length=255)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(max_length=255)
+    remark = models.TextField(null=True, blank=True)
+    file_upload = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "leave_requests"
+
 # changes
 
 
 class HostelComplaint(models.Model):
+    STATUS_CHOICES = [
+        ('open', 'Open'),
+        ('in_progress', 'In Progress'),
+        ('resolved', 'Resolved'),
+    ]
+
     hall_name = models.CharField(max_length=100)
     student_name = models.CharField(max_length=100)
     roll_number = models.CharField(max_length=20)
+    category = models.CharField(max_length=50, default='General')
     description = models.TextField()
     contact_number = models.CharField(max_length=15)
+    image_upload = models.FileField(upload_to='hostel_management/complaints/', null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Complaint from {self.student_name} in {self.hall_name}"

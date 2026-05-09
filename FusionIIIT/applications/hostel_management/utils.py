@@ -14,15 +14,30 @@ def get_caretaker_hall(hall_caretakers,user):
     for caretaker in hall_caretakers:
         if caretaker.staff.id.user==user:
             return caretaker.hall
+
+
+def _parse_room_identifier(room_identifier: str):
+    """Parse room identifiers like 'A-101' or 'A101'.
+
+    Returns (block, room_number) as strings.
+    """
+    if not room_identifier:
+        return None, None
+
+    value = str(room_identifier).strip()
+    block = value[0] if value else None
+    digits = re.findall(r"\d+", value)
+    room_number = str(digits[0]) if digits else None
+    return block, room_number
             
 
 def remove_from_room(student):
     """Removes the student from his current room"""
     if (student is None) or student.room_no is None:
         return
-    room = re.findall('[0-9]+',str(student.room_no))
-    room_num=str(room[0])
-    block = str(student.room_no[0])
+    block, room_num = _parse_room_identifier(student.room_no)
+    if not block or not room_num:
+        return
     hall=Hall.objects.get(hall_id="hall"+str(student.hall_no))
     Room=HallRoom.objects.get(hall=hall,block_no=block,room_no=room_num)
     Room.room_occupied=Room.room_occupied-1
@@ -34,13 +49,14 @@ def add_to_room(student, new_room, new_hall):
     """Adds the student to his new room"""
     if (student is None) or (new_room is None) or (new_hall is None):
         return
-    block=str(new_room[0])
-    room = re.findall('[0-9]+', new_room)
-    student.room_no=str(block)+"-"+str(room[0])
+    block, room_num = _parse_room_identifier(new_room)
+    if not block or not room_num:
+        return
+    student.room_no=str(block)+"-"+str(room_num)
     student.hall_no = int(new_hall[-1])
     student.save()
     hall=Hall.objects.get(hall_id="hall"+str(student.hall_no))
-    Room=HallRoom.objects.get(hall=hall,block_no=block,room_no=str(room[0]))
+    Room=HallRoom.objects.get(hall=hall,block_no=block,room_no=str(room_num))
     Room.room_occupied=Room.room_occupied+1
     Room.save()
 

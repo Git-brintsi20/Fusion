@@ -61,6 +61,63 @@ def is_superuser(user):
     return user.is_authenticated and user.is_superuser
 
 
+def _get_request_user(request):
+    user = getattr(request, "user", None)
+    if user and getattr(user, "is_authenticated", False):
+        return user
+
+    auth_header = request.headers.get("Authorization") or ""
+    if auth_header.lower().startswith("token "):
+        token_key = auth_header.split(" ", 1)[1].strip()
+        token = (
+            Token.objects.select_related("user")
+            .filter(key=token_key)
+            .first()
+        )
+        if token:
+            return token.user
+
+    return None
+
+
+@csrf_exempt
+def delete_fine_api(request, fine_id):
+    if request.method not in ["DELETE", "POST"]:
+        return JsonResponse({"error": "Method not allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    if not hasattr(user, "extrainfo") and not user.is_superuser:
+        return JsonResponse({"error": "You are not authorized."}, status=403)
+
+    hall_id = None
+    if hasattr(user, "extrainfo"):
+        staff_id = user.extrainfo.id
+        caretaker = HallCaretaker.objects.filter(staff_id=staff_id).first()
+        if caretaker:
+            hall_id = caretaker.hall_id
+        else:
+            warden = HallWarden.objects.filter(faculty_id=staff_id).first()
+            if warden:
+                hall_id = warden.hall_id
+
+    if hall_id is None and not user.is_superuser:
+        return JsonResponse({"error": "You are not authorized."}, status=403)
+
+    try:
+        if hall_id is None:
+            fine = HostelFine.objects.get(fine_id=fine_id)
+        else:
+            fine = HostelFine.objects.get(fine_id=fine_id, hall_id=hall_id)
+    except HostelFine.DoesNotExist:
+        return JsonResponse({"error": "Hostel fine not found."}, status=404)
+
+    fine.delete()
+    return JsonResponse({"message": "Fine deleted successfully."}, status=200)
+
+
 # //! My change
 class GetIntenderId(APIView):
     authentication_classes = [TokenAuthentication]
@@ -125,9 +182,11 @@ def hostel_view(request, context={}):
         intender=request.user
     ).order_by("-arrival_date")
 
-    halls = Hall.objects.all()
     # Create a list to store additional details
     hostel_details = []
+    for hall in all_hall:
+        caretaker = assignments.get(hall.hall_id, {}).get("caretaker")
+        warden = assignments.get(hall.hall_id, {}).get("warden")
 
     # Loop through each hall and fetch assignedCaretaker and assignedWarden
     for hall in halls:
@@ -237,8 +296,11 @@ def hostel_view(request, context={}):
 
     # //! My change for imposing fines
     user_id = request.user
-    staff_fine_caretaker = user_id.extrainfo.id
-    students = Student.objects.all()
+    try:
+        staff_fine_caretaker = user_id.extrainfo.id
+    except Exception:
+        staff_fine_caretaker = None
+    students = all_students
 
     fine_user = request.user
 
@@ -577,6 +639,208 @@ class NoticeBoardDelete(APIView):
 
     def get(self, request):
         return Response({"error": "Invalid request method"}, status=status.HTTP_400_BAD_REQUEST)
+
+@csrf_exempt
+def update_notice(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST requests are allowed."}, status=405)
+
+    accepts_json = "application/json" in (request.headers.get("Accept") or "")
+    user = _get_request_user(request)
+
+    if not user:
+        if accepts_json:
+            return JsonResponse({"error": "Authentication required."}, status=401)
+        return redirect(LOGIN_URL)
+
+    notice_id = None
+    if request.content_type and "application/json" in request.content_type:
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+            notice_id = payload.get("id") or payload.get("notice_id")
+        except Exception:
+            notice_id = None
+
+    if notice_id is None:
+        notice_id = request.POST.get("id") or request.POST.get("notice_id")
+
+    if not notice_id:
+        return JsonResponse({"error": "id is required."}, status=400)
+
+    notice = HostelNoticeBoard.objects.filter(pk=notice_id).first()
+    if not notice:
+        return JsonResponse({"error": "Notice not found."}, status=404)
+
+    head_line = (
+        request.POST.get("head_line")
+        or request.POST.get("headline")
+        or request.POST.get("title")
+    )
+    description = request.POST.get("description")
+    content = request.FILES.get("content") or request.FILES.get("file")
+
+    updated = False
+    if head_line is not None and head_line != "":
+        notice.head_line = head_line
+        updated = True
+    if description is not None:
+        notice.description = description
+        updated = True
+    if content is not None:
+        notice.content = content
+        updated = True
+
+    if not updated:
+        return JsonResponse({"error": "No fields to update."}, status=400)
+
+    notice.save()
+    return JsonResponse({"status": "ok"}, status=200)
+
+
+@csrf_exempt
+def hostel_complaints_api(request):
+    if request.method != "GET":
+        return JsonResponse({"error": "Only GET requests are allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    complaints = HostelComplaint.objects.all()
+
+    status_value = (request.GET.get("status") or "").strip().lower()
+    status_value = status_value.replace(" ", "_")
+    if status_value:
+        if status_value not in {"open", "in_progress", "resolved"}:
+            return JsonResponse({"error": "Invalid status value."}, status=400)
+        complaints = complaints.filter(status__iexact=status_value)
+
+    category_value = (request.GET.get("category") or "").strip()
+    if category_value:
+        complaints = complaints.filter(category__iexact=category_value)
+
+    search_value = (request.GET.get("search") or "").strip()
+    if search_value:
+        complaints = complaints.filter(
+            Q(student_name__icontains=search_value)
+            | Q(roll_number__icontains=search_value)
+            | Q(description__icontains=search_value)
+            | Q(contact_number__icontains=search_value)
+            | Q(hall_name__icontains=search_value)
+            | Q(category__icontains=search_value)
+        )
+
+    sort_value = (request.GET.get("sort") or "created_desc").strip()
+    sort_map = {
+        "created_desc": "-created_at",
+        "created_asc": "created_at",
+        "updated_desc": "-updated_at",
+        "updated_asc": "updated_at",
+        "status_asc": "status",
+        "status_desc": "-status",
+        "id_desc": "-id",
+        "id_asc": "id",
+    }
+    order_by = sort_map.get(sort_value, "-created_at")
+    complaints = complaints.order_by(order_by)
+
+    data = []
+    for complaint in complaints:
+        data.append(
+            {
+                "id": complaint.id,
+                "hall_name": complaint.hall_name,
+                "student_name": complaint.student_name,
+                "roll_number": complaint.roll_number,
+                "description": complaint.description,
+                "contact_number": complaint.contact_number,
+                "category": complaint.category,
+                "image_upload": complaint.image_upload.url if complaint.image_upload else "",
+                "created_at": complaint.created_at.isoformat() if complaint.created_at else "",
+                "status": complaint.status,
+                "updated_at": complaint.updated_at.isoformat() if complaint.updated_at else "",
+            }
+        )
+
+    return JsonResponse({"complaints": data}, status=200)
+
+
+@csrf_exempt
+def update_hostel_complaint_status(request, complaint_id):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST requests are allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    payload_status = None
+    if request.content_type and "application/json" in request.content_type:
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+            payload_status = payload.get("status")
+        except Exception:
+            payload_status = None
+
+    new_status = (payload_status or request.POST.get("status") or "").strip().lower()
+    new_status = new_status.replace(" ", "_")
+    if new_status not in {"open", "in_progress", "resolved"}:
+        return JsonResponse({"error": "Invalid status value."}, status=400)
+
+    complaint = HostelComplaint.objects.filter(pk=complaint_id).first()
+    if not complaint:
+        return JsonResponse({"error": "Complaint not found."}, status=404)
+
+    complaint.status = new_status
+    complaint.updated_at = timezone.now()
+    complaint.save(update_fields=["status", "updated_at"])
+
+    return JsonResponse({"status": "ok"}, status=200)
+
+
+@csrf_exempt
+def assign_rooms_by_warden(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST requests are allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    uploaded_file = request.FILES.get("file") or request.FILES.get("upload_rooms")
+    if not uploaded_file:
+        return JsonResponse({"error": "file is required."}, status=400)
+
+    batch = request.POST.get("selectedBatch") or request.POST.get("batch")
+
+    upload_dir = os.path.join(
+        settings.MEDIA_ROOT, "hostel_management", "allotments"
+    )
+    storage = FileSystemStorage(location=upload_dir)
+    saved_name = storage.save(uploaded_file.name, uploaded_file)
+    file_url = storage.url(saved_name)
+
+    return JsonResponse(
+        {
+            "message": "File uploaded successfully.",
+            "file": file_url,
+            "batch": batch,
+        },
+        status=200,
+    )
+
+
+@csrf_exempt
+def update_student_allotment(request):
+    if request.method not in ["GET", "POST"]:
+        return JsonResponse({"error": "Only GET/POST requests are allowed."}, status=405)
+
+    user = _get_request_user(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+
+    return JsonResponse({"message": "Student allotment updated."}, status=200)
+
 
 def edit_student_rooms_sheet(request):
     """
@@ -1222,8 +1486,16 @@ class PostComplaint(APIView):
         description = request.data.get("description")
         contact_number = request.data.get("contact_number")
 
-        # Assuming the student's name is stored in the user object
-        student_name = request.user.username
+        if not hall_name:
+            hall_name = "Unknown"
+
+        contact_number = None
+        try:
+            contact_number = user.extrainfo.phone_no
+        except Exception:
+            contact_number = None
+
+        student_name = user.get_full_name() or user.username
 
         complaint = HostelComplaint.objects.create(
             hall_name=hall_name,
